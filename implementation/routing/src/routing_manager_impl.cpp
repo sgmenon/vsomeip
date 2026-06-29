@@ -3336,16 +3336,13 @@ void routing_manager_impl::send_error(return_code_e _return_code, const byte_t* 
     session_t its_session = 0;
     major_version_t its_version = 0;
 
-    if (_size >= VSOMEIP_CLIENT_POS_MAX)
+    if (_size >= VSOMEIP_FULL_HEADER_SIZE) {
         its_client = bithelper::read_uint16_be(&_data[VSOMEIP_CLIENT_POS_MIN]);
-    if (_size >= VSOMEIP_SERVICE_POS_MAX)
         its_service = bithelper::read_uint16_be(&_data[VSOMEIP_SERVICE_POS_MIN]);
-    if (_size >= VSOMEIP_METHOD_POS_MAX)
         its_method = bithelper::read_uint16_be(&_data[VSOMEIP_METHOD_POS_MIN]);
-    if (_size >= VSOMEIP_SESSION_POS_MAX)
         its_session = bithelper::read_uint16_be(&_data[VSOMEIP_SESSION_POS_MIN]);
-    if (_size >= VSOMEIP_INTERFACE_VERSION_POS)
         its_version = _data[VSOMEIP_INTERFACE_VERSION_POS];
+    }
 
     auto error_message = runtime::get()->create_message(_reliable);
     error_message->set_client(its_client);

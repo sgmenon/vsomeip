@@ -474,7 +474,7 @@ bool server_endpoint_impl<Protocol>::check_queue_limit(const buffer_sequence_ptr
         method_t its_method(0);
         client_t its_client(0);
         session_t its_session(0);
-        if (_sequence && _size >= VSOMEIP_SESSION_POS_MAX) {
+        if (_sequence && _size >= VSOMEIP_FULL_HEADER_SIZE) {
             _sequence->read_uint16_be(VSOMEIP_SERVICE_POS_MIN, its_service);
             _sequence->read_uint16_be(VSOMEIP_METHOD_POS_MIN, its_method);
             _sequence->read_uint16_be(VSOMEIP_CLIENT_POS_MIN, its_client);

@@ -3417,7 +3417,7 @@ std::uint32_t configuration_impl::get_max_message_size_local() const {
     }
 
     uint32_t its_max_message_size = max_local_message_size_;
-    if (VSOMEIP_MAX_TCP_MESSAGE_SIZE >= its_max_message_size) {
+    if (VSOMEIP_MAX_TCP_MESSAGE_SIZE > its_max_message_size) {
         its_max_message_size = VSOMEIP_MAX_TCP_MESSAGE_SIZE;
     }
     if (VSOMEIP_MAX_UDP_MESSAGE_SIZE > its_max_message_size) {
