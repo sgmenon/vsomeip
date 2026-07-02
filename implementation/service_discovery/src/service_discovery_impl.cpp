@@ -694,9 +694,9 @@ void service_discovery_impl::insert_offer_entries(std::vector<std::shared_ptr<me
         for (const auto& its_instance : its_service.second) {
             if ((!is_suspended_)
                 && ((!is_diagnosis_) || (is_diagnosis_ && !configuration_->is_someip(its_service.first, its_instance.first)))) {
-                // Only insert services with configured endpoint(s)
-                if ((_ignore_phase || its_instance.second->is_in_mainphase())
-                    && (its_instance.second->get_endpoint(false) || its_instance.second->get_endpoint(true))) {
+                // Only insert services that are ready to be offered. A service configured with both
+                // reliable and unreliable endpoints is withheld until BOTH endpoints are up.
+                if ((_ignore_phase || its_instance.second->is_in_mainphase()) && its_instance.second->is_ready_to_offer()) {
                     insert_offer_service(_messages, its_instance.second);
                 }
             }
@@ -1468,12 +1468,10 @@ void service_discovery_impl::process_findservice_serviceentry(service_t _service
 
     if (_instance != ANY_INSTANCE) {
         std::shared_ptr<serviceinfo> its_info = host_->get_offered_service(_service, _instance);
-        if (its_info) {
+        if (its_info && its_info->is_ready_to_offer()) {
             if (_major == ANY_MAJOR || _major == its_info->get_major()) {
                 if (_minor == 0xFFFFFFFF || _minor <= its_info->get_minor()) {
-                    if (its_info->get_endpoint(false) || its_info->get_endpoint(true)) {
-                        send_uni_or_multicast_offerservice(its_info, _unicast_flag);
-                    }
+                    send_uni_or_multicast_offerservice(its_info, _unicast_flag);
                 }
             }
         }
@@ -1482,11 +1480,12 @@ void service_discovery_impl::process_findservice_serviceentry(service_t _service
         // send back all available instances
         for (const auto& found_instance : offered_instances) {
             auto its_info = found_instance.second;
+            if (!its_info->is_ready_to_offer()) {
+                continue;
+            }
             if (_major == ANY_MAJOR || _major == its_info->get_major()) {
                 if (_minor == 0xFFFFFFFF || _minor <= its_info->get_minor()) {
-                    if (its_info->get_endpoint(false) || its_info->get_endpoint(true)) {
-                        send_uni_or_multicast_offerservice(its_info, _unicast_flag);
-                    }
+                    send_uni_or_multicast_offerservice(its_info, _unicast_flag);
                 }
             }
         }

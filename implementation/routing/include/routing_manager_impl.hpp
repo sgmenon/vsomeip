@@ -305,6 +305,8 @@ private:
     std::set<client_t> get_requesters_unlocked(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
     bool has_requester_unlocked(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
 
+    std::shared_ptr<endpoint> find_remote_client_for_request(client_t _client, service_t _service, instance_t _instance, method_t _method,
+                                                             bool _reliable);
     bool is_requester(client_t _client, service_t _service, instance_t _instance);
     bool is_orphaned_remote_response(client_t _client, service_t _service, instance_t _instance, const byte_t* _data);
 

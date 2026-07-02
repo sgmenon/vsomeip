@@ -1100,7 +1100,7 @@ bool routing_manager_impl::send_with_sequence(client_t _client, buffer_sequence_
                                       _status_check);
         } else {
             if (is_request) {
-                its_target = ep_mgr_impl_->find_or_create_remote_client(its_service, _instance, _reliable);
+                its_target = find_remote_client_for_request(its_client, its_service, _instance, its_method, _reliable);
                 if (its_target) {
                     if (_completion) {
                         _sequence->attach_completion(_completion);
@@ -1312,7 +1312,7 @@ bool routing_manager_impl::send(client_t _client, message_buffer_ptr_t _frame, i
 #endif
             }
             if (is_request) {
-                its_target = ep_mgr_impl_->find_or_create_remote_client(its_service, _instance, _reliable);
+                its_target = find_remote_client_for_request(its_client, its_service, _instance, its_method, _reliable);
                 if (its_target) {
                     auto its_sequence = its_e2e_sequence ? its_e2e_sequence : build_unprotected_sequence();
                     is_sent = its_target->send(its_sequence);
@@ -2609,6 +2609,7 @@ void routing_manager_impl::init_service_info(service_t _service, instance_t _ins
                 VSOMEIP_INFO << "rmi::" << __func__ << ": Port configuration missing for [" << std::hex << _service << "." << _instance
                              << "]. Service is internal.";
             }
+            its_info->set_endpoint_requirements(ILLEGAL_PORT != its_reliable_port, ILLEGAL_PORT != its_unreliable_port);
         }
     } else {
         VSOMEIP_ERROR << "Missing vsomeip configuration.";
@@ -4216,6 +4217,23 @@ std::vector<protocol::service> routing_manager_impl::get_requested_services(clie
         }
     }
     return its_requests;
+}
+
+std::shared_ptr<endpoint> routing_manager_impl::find_remote_client_for_request(client_t _client, service_t _service, instance_t _instance,
+                                                                             method_t _method, bool _reliable) {
+    if (auto its_target = ep_mgr_impl_->find_or_create_remote_client(_service, _instance, _reliable)) {
+        return its_target;
+    }
+    // The endpoint for the requested reliability does not exist (yet): the service may be announced
+    // through one transport before the other is up, or the remote ECU offers its endpoints
+    // incrementally. The service is available, so fall back to the other endpoint.
+    auto its_fallback = ep_mgr_impl_->find_or_create_remote_client(_service, _instance, !_reliable);
+    if (its_fallback) {
+        VSOMEIP_WARNING << "rmi::" << __func__ << ": Routing info for requested reliability not found, sending via the available endpoint ("
+                        << std::hex << std::setfill('0') << std::setw(4) << _client << "): [" << std::setw(4) << _service << "."
+                        << std::setw(4) << _instance << "." << std::setw(4) << _method << "] reliable=" << std::boolalpha << _reliable;
+    }
+    return its_fallback;
 }
 
 bool routing_manager_impl::is_requester(client_t _client, service_t _service, instance_t _instance) {
