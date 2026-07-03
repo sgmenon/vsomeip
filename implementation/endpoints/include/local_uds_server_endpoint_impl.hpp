@@ -17,6 +17,7 @@
 
 #include "buffer.hpp"
 #include "message_buffer_pool.hpp"
+#include "partial_message_watchdog.hpp"
 #include "server_endpoint_impl.hpp"
 
 namespace vsomeip_v3 {
@@ -113,9 +114,12 @@ private:
         void handle_recv_buffer_exception(const std::exception& _e);
         void shutdown_and_close();
         void shutdown_and_close_unlocked();
+        void update_partial_message_watchdog();
+        void partial_message_timeout(std::uint64_t _generation);
 
         std::mutex socket_mutex_;
         local_uds_server_endpoint_impl::socket_type socket_;
+        partial_message_watchdog partial_message_watchdog_;
         std::weak_ptr<local_uds_server_endpoint_impl> server_;
 
         const std::uint32_t recv_buffer_size_initial_;

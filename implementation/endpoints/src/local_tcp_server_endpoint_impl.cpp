@@ -356,7 +356,7 @@ void local_tcp_server_endpoint_impl::accept_cbk(connection::ptr _connection, boo
 local_tcp_server_endpoint_impl::connection::connection(const std::shared_ptr<local_tcp_server_endpoint_impl>& _server,
                                                        std::uint32_t _max_message_size, std::uint32_t _initial_recv_buffer_size,
                                                        std::uint32_t _buffer_shrink_threshold, boost::asio::io_context& _io) :
-    socket_(abstract_socket_factory::get()->create_tcp_socket(_io)), server_(_server),
+    socket_(abstract_socket_factory::get()->create_tcp_socket(_io)), partial_message_watchdog_(_io), server_(_server),
     recv_buffer_size_initial_(_initial_recv_buffer_size + 8), max_message_size_(_max_message_size),
     recv_buffer_pool_(message_buffer_pool::create_or_null(_server->configuration_->get_receive_buffer_pool_size(),
                                                           _initial_recv_buffer_size + 8)),
@@ -445,6 +445,7 @@ void local_tcp_server_endpoint_impl::connection::start() {
 }
 
 void local_tcp_server_endpoint_impl::connection::stop() {
+    partial_message_watchdog_.disarm();
     std::scoped_lock its_lock{socket_mutex_};
     is_stopped_ = true;
     if (socket_->is_open()) {
@@ -787,6 +788,7 @@ void local_tcp_server_endpoint_impl::connection::receive_cbk(boost::system::erro
         VSOMEIP_INFO << "ltsei::receive_cbk closing connection due to is_stopped " << is_stopped_ << ", error '" << _error.message()
                      << "', is_error " << is_error << ", bound_client_ " << std::hex << bound_client_ << "', endpoint > " << this;
 
+        partial_message_watchdog_.disarm();
         shutdown_and_close(true);
         if (bound_client_ != VSOMEIP_CLIENT_UNSET) {
             its_server->remove_connection(bound_client_, this);
@@ -797,8 +799,37 @@ void local_tcp_server_endpoint_impl::connection::receive_cbk(boost::system::erro
             VSOMEIP_WARNING << "ltsei::receive_cbk received err '" << _error.message() << "', endpoint > " << this;
         }
 
+        update_partial_message_watchdog();
         // schedule next read
         start();
+    }
+}
+
+void local_tcp_server_endpoint_impl::connection::update_partial_message_watchdog() {
+    if (recv_buffer_size_ == 0) {
+        partial_message_watchdog_.disarm();
+        return;
+    }
+    partial_message_watchdog_.arm([weak_self = weak_from_this()](std::uint64_t _generation) {
+        if (auto self = weak_self.lock()) {
+            self->partial_message_timeout(_generation);
+        }
+    });
+}
+
+void local_tcp_server_endpoint_impl::connection::partial_message_timeout(std::uint64_t _generation) {
+    if (!partial_message_watchdog_.is_current(_generation)) {
+        return;
+    }
+    std::scoped_lock its_lock{socket_mutex_};
+    VSOMEIP_ERROR << "ltsei::" << __func__ << ": waited more than " << std::dec << partial_message_watchdog::timeout.count()
+                  << "s for the remainder of a local message, dropping connection. remote: " << get_path_remote() << " endpoint > "
+                  << this;
+    // Shutting down (not closing) makes the pending read complete with eof, so the
+    // regular receive_cbk teardown removes the connection.
+    if (socket_ && socket_->is_open()) {
+        boost::system::error_code its_error;
+        socket_->shutdown(tcp_socket::shutdown_both, its_error);
     }
 }
 
