@@ -112,6 +112,10 @@ bool tp_message::add_segment(const byte_t* const _data, std::uint32_t _data_leng
                         // append to end of message
                         message_.insert(message_.end(), &_data[VSOMEIP_TP_PAYLOAD_POS], &_data[VSOMEIP_TP_PAYLOAD_POS] + its_segment_size);
                         current_message_size_ += its_segment_size;
+                    } else if (seg_prev->end_ >= seg_current->end_) {
+                        VSOMEIP_WARNING << __func__ << ":" << __LINE__ << " received segment that fully overlaps with previous segment "
+                                        << get_message_id(_data, _data_length) << " going to ignore segment";
+                        segments_.erase(seg_current);
                     } else {
                         // this segment starts before the end of the previous and
                         // would overwrite already received data
