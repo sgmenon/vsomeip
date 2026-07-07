@@ -305,6 +305,9 @@ private:
     std::set<client_t> get_requesters_unlocked(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
     bool has_requester_unlocked(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
 
+    bool is_requester(client_t _client, service_t _service, instance_t _instance);
+    bool is_orphaned_remote_response(client_t _client, service_t _service, instance_t _instance, const byte_t* _data);
+
     void call_sd_endpoint_connected(const boost::system::error_code& _error, service_t _service, instance_t _instance,
                                     const std::shared_ptr<endpoint>& _endpoint, std::shared_ptr<boost::asio::steady_timer> _timer);
 

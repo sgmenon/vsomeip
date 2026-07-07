@@ -729,8 +729,11 @@ void routing_manager_impl::request_service(client_t _client, service_t _service,
     } else {
         if ((_major == its_info->get_major() || DEFAULT_MAJOR == its_info->get_major() || ANY_MAJOR == _major)
             && (_minor <= its_info->get_minor() || DEFAULT_MINOR == its_info->get_minor() || _minor == ANY_MINOR)) {
+            // Record the request even for a locally offered service: if the local provider later
+            // stops offering and a remote provider takes over, responses to this client would
+            // otherwise be dropped as orphaned.
+            add_requested_service(_client, _service, _instance, _major, _minor);
             if (!its_info->is_local()) {
-                add_requested_service(_client, _service, _instance, _major, _minor);
                 if (discovery_) {
                     // Non local service instance ~> tell SD to find it!
                     discovery_->request_service(_service, _instance, _major, _minor, DEFAULT_TTL);
@@ -1904,6 +1907,9 @@ bool routing_manager_impl::on_message(service_t _service, instance_t _instance, 
     } else if (its_client == host_->get_client()) {
         deliver_message(_frame, _instance, _reliable, _bound_client, _sec_client, _check_status, _is_from_remote);
     } else {
+        if (_is_from_remote && is_orphaned_remote_response(its_client, _service, _instance, _data)) {
+            return false;
+        }
         message_buffer_ptr_t its_send_frame = _frame.buffer;
         if (!_frame.buffer || _frame.offset != 0 || _frame.length != _frame.buffer->size()) {
             its_send_frame = std::make_shared<message_buffer_t>(_frame.data(), _frame.data() + _frame.length);
@@ -1948,6 +1954,9 @@ bool routing_manager_impl::on_message_checked(service_t _service, instance_t _in
             deliver_message(_frame, _instance, _reliable, _bound_client, _sec_client, _check_status, _is_from_remote);
         }
     } else {
+        if (_is_from_remote && is_orphaned_remote_response(its_client, _service, _instance, _data)) {
+            return false;
+        }
         // Proxy / local forward: scatter hole-free SOME/IP (no materialize concat).
         buffer_sequence_ptr_t its_forward;
         if (_e2e_checked) {
@@ -4203,11 +4212,54 @@ std::vector<protocol::service> routing_manager_impl::get_requested_services(clie
             }
             if (requested) {
                 its_requests.emplace_back(service.first, instance.first, its_major, its_minor);
-                break;
             }
         }
     }
     return its_requests;
+}
+
+bool routing_manager_impl::is_requester(client_t _client, service_t _service, instance_t _instance) {
+    std::scoped_lock its_lock{requested_services_mutex_};
+
+    // Check both the concrete and the wildcard nodes so wildcard requesters aren't missed.
+    for (const service_t its_service_key : {_service, ANY_SERVICE}) {
+        const auto found_service = requested_services_.find(its_service_key);
+        if (found_service == requested_services_.end()) {
+            continue;
+        }
+        for (const instance_t its_instance_key : {_instance, ANY_INSTANCE}) {
+            const auto found_instance = found_service->second.find(its_instance_key);
+            if (found_instance == found_service->second.end()) {
+                continue;
+            }
+            for (const auto& [major, minors] : found_instance->second) {
+                for (const auto& [minor, clients] : minors) {
+                    if (clients.find(_client) != clients.end()) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool routing_manager_impl::is_orphaned_remote_response(client_t _client, service_t _service, instance_t _instance, const byte_t* _data) {
+    const byte_t its_type = _data[VSOMEIP_MESSAGE_TYPE_POS];
+    if (!utility::is_response(its_type) && !utility::is_error(its_type)) {
+        return false;
+    }
+    if (auto its_info = find_service(_service, _instance); its_info && its_info->is_local()) {
+        return false;
+    }
+    if (is_requester(_client, _service, _instance)) {
+        return false;
+    }
+    VSOMEIP_WARNING << "rmi::" << __func__ << ": Dropping response/error for client (" << std::hex << std::setfill('0') << std::setw(4)
+                    << _client << ") that is not/no longer a requester of service: [" << std::setw(4) << _service << "." << std::setw(4)
+                    << _instance << "." << std::setw(4) << bithelper::read_uint16_be(&_data[VSOMEIP_METHOD_POS_MIN]) << "] "
+                    << std::setw(4) << bithelper::read_uint16_be(&_data[VSOMEIP_SESSION_POS_MIN]);
+    return true;
 }
 
 std::set<client_t> routing_manager_impl::get_requesters(service_t _service, instance_t _instance, major_version_t _major,
