@@ -10,40 +10,45 @@
 
 #include <boost/asio/ip/udp.hpp>
 
+#include <memory>
+
 namespace vsomeip_v3 {
 
 class asio_udp_socket final : public udp_socket {
 public:
-    explicit asio_udp_socket(boost::asio::io_context& _io) : socket_(_io) { }
+    explicit asio_udp_socket(boost::asio::io_context& _io) : socket_(std::make_shared<boost::asio::ip::udp::socket>(_io)) { }
 
-    [[nodiscard]] bool is_open() const override { return socket_.is_open(); }
-    void open(boost::asio::ip::udp::endpoint::protocol_type _pt, boost::system::error_code& _ec) override { socket_.open(_pt, _ec); }
-    void bind(const endpoint_type& _ep, boost::system::error_code& _ec) override { socket_.bind(_ep, _ec); }
-    void close(boost::system::error_code& _ec) override { socket_.close(_ec); }
-    void cancel(boost::system::error_code& _ec) override { socket_.cancel(_ec); }
+    [[nodiscard]] bool is_open() const override { return socket_->is_open(); }
+    void open(boost::asio::ip::udp::endpoint::protocol_type _pt, boost::system::error_code& _ec) override { socket_->open(_pt, _ec); }
+    void bind(const endpoint_type& _ep, boost::system::error_code& _ec) override { socket_->bind(_ep, _ec); }
+    void close(boost::system::error_code& _ec) override { socket_->close(_ec); }
+    void cancel(boost::system::error_code& _ec) override { socket_->cancel(_ec); }
 
-    endpoint_type local_endpoint(boost::system::error_code& _ec) const override { return socket_.local_endpoint(_ec); }
+    endpoint_type local_endpoint(boost::system::error_code& _ec) const override { return socket_->local_endpoint(_ec); }
 
     void set_option(boost::asio::socket_base::reuse_address _opt, boost::system::error_code& _ec) override {
-        socket_.set_option(_opt, _ec);
+        socket_->set_option(_opt, _ec);
     }
-    void set_option(boost::asio::socket_base::broadcast _opt, boost::system::error_code& _ec) override { socket_.set_option(_opt, _ec); }
+    void set_option(boost::asio::socket_base::broadcast _opt, boost::system::error_code& _ec) override { socket_->set_option(_opt, _ec); }
 
     void async_send(const std::vector<boost::asio::const_buffer>& _buffers, rw_handler _handler) override {
-        socket_.async_send(_buffers, std::move(_handler));
+        auto socket = socket_;
+        socket->async_send(_buffers, [f = std::move(_handler), socket](auto const& _ec, size_t _bytes) { f(_ec, _bytes); });
     }
     void async_send_to(const std::vector<boost::asio::const_buffer>& _buffers, const endpoint_type& _destination,
                        rw_handler _handler) override {
-        socket_.async_send_to(_buffers, _destination, std::move(_handler));
+        auto socket = socket_;
+        socket->async_send_to(_buffers, _destination, [f = std::move(_handler), socket](auto const& _ec, size_t _bytes) { f(_ec, _bytes); });
     }
     void async_receive_from(boost::asio::mutable_buffer _buffer, endpoint_type& _sender, rw_handler _handler) override {
-        socket_.async_receive_from(_buffer, _sender, std::move(_handler));
+        auto socket = socket_;
+        socket->async_receive_from(_buffer, _sender, [f = std::move(_handler), socket](auto const& _ec, size_t _bytes) { f(_ec, _bytes); });
     }
 
-    boost::asio::ip::udp::socket& native() override { return socket_; }
+    boost::asio::ip::udp::socket& native() override { return *socket_; }
 
 private:
-    boost::asio::ip::udp::socket socket_;
+    std::shared_ptr<boost::asio::ip::udp::socket> socket_;
 };
 
 } // namespace vsomeip_v3
