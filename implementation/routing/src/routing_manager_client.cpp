@@ -1095,14 +1095,13 @@ void routing_manager_client::on_message(owned_buffer_slice _frame, endpoint* _re
                         } else { // Notification or Response
 
                             // Verifies security offer rule for messages (notifications and
-                            // responses)
+                            // responses).
                             bool is_offer_access_ok =
-                                    (configuration_->is_security_external()
-                                     && VSOMEIP_SEC_OK
-                                             == configuration_->get_security()->is_client_allowed_to_offer(
-                                                     _sec_client, its_message->get_service(), its_message->get_instance()));
+                                    (VSOMEIP_SEC_OK
+                                     == configuration_->get_security()->is_client_allowed_to_offer(_sec_client, its_message->get_service(),
+                                                                                                   its_message->get_instance()));
 
-                            if (!is_offer_access_ok && configuration_->is_security_external()) {
+                            if (!is_offer_access_ok) {
                                 VSOMEIP_WARNING << "vSomeIP Security: Client 0x" << std::hex << std::setw(4) << std::setfill('0')
                                                 << get_client() << " : routing_manager_client::on_message: received a "
                                                 << (utility::is_notification(its_message->get_message_type()) ? "notification" : "response")
@@ -1116,7 +1115,7 @@ void routing_manager_client::on_message(owned_buffer_slice _frame, endpoint* _re
                                                            && is_response_allowed(_bound_client, its_message->get_service(),
                                                                                   its_message->get_instance(), its_message->get_method()));
 
-                            if (is_intern_resp_allowed || is_offer_access_ok) {
+                            if (is_intern_resp_allowed || configuration_->is_security_external()) {
                                 const bool is_notification = utility::is_notification(its_message->get_message_type());
 
                                 if (is_notification) {
