@@ -188,9 +188,10 @@ void endpoint_manager_impl::add_remote_service_info(service_t _service, instance
         }
     }
 
-    if (must_report)
+    if (must_report && its_info) {
         static_cast<routing_manager_impl*>(rm_)->service_endpoint_connected(_service, _instance, its_info->get_major(),
                                                                             its_info->get_minor(), its_endpoint);
+    }
 }
 
 void endpoint_manager_impl::add_remote_service_info(service_t _service, instance_t _instance,
@@ -215,7 +216,7 @@ void endpoint_manager_impl::add_remote_service_info(service_t _service, instance
             its_info = rm_->find_service(_service, _instance);
     }
 
-    if (must_report) {
+    if (must_report && its_info) {
         static_cast<routing_manager_impl*>(rm_)->service_endpoint_connected(_service, _instance, its_info->get_major(),
                                                                             its_info->get_minor(), its_unreliable);
         static_cast<routing_manager_impl*>(rm_)->service_endpoint_connected(_service, _instance, its_info->get_major(),
