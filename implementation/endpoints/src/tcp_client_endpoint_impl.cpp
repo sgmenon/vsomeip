@@ -818,7 +818,7 @@ void tcp_client_endpoint_impl::send_cbk(boost::system::error_code const& _error,
                                         const buffer_sequence_ptr_t& _sent_msg) {
     (void)_bytes;
 
-    std::scoped_lock<std::recursive_mutex> its_lock(mutex_);
+    std::unique_lock<std::recursive_mutex> its_lock(mutex_);
     sent_timer_.cancel();
 
     if (!_error) {
@@ -859,15 +859,6 @@ void tcp_client_endpoint_impl::send_cbk(boost::system::error_code const& _error,
             queue_size_ = 0;
             shutdown_and_close_socket(false, false);
         } else {
-            if (state_ == cei_state_e::CONNECTING) {
-                VSOMEIP_WARNING << "tce::send_cbk endpoint is already restarting:" << get_remote_information();
-            } else {
-                std::shared_ptr<endpoint_host> its_host = endpoint_host_.lock();
-                if (its_host) {
-                    its_host->on_disconnect(shared_from_this());
-                }
-                restart(true);
-            }
             service_t its_service(0);
             method_t its_method(0);
             client_t its_client(0);
@@ -878,10 +869,24 @@ void tcp_client_endpoint_impl::send_cbk(boost::system::error_code const& _error,
                 _sent_msg->read_uint16_be(VSOMEIP_CLIENT_POS_MIN, its_client);
                 _sent_msg->read_uint16_be(VSOMEIP_SESSION_POS_MIN, its_session);
             }
+            // Capture queue statistics for the log below before releasing mutex_.
+            const std::size_t its_queue_size = queue_.size();
+            const std::size_t its_queue_data_size = queue_size_;
+            if (state_ == cei_state_e::CONNECTING) {
+                VSOMEIP_WARNING << "tce::send_cbk endpoint is already restarting:" << get_remote_information();
+            } else {
+                // Release mutex_ before on_disconnect() to avoid lock-order-inversion
+                its_lock.unlock();
+                std::shared_ptr<endpoint_host> its_host = endpoint_host_.lock();
+                if (its_host) {
+                    its_host->on_disconnect(shared_from_this());
+                }
+                restart(true);
+            }
             VSOMEIP_WARNING << "tce::send_cbk received error: " << _error.message() << " (" << std::dec << _error.value() << ") "
-                            << get_remote_information() << " " << std::dec << queue_.size() << " " << std::dec << queue_size_ << " ("
-                            << std::hex << std::setfill('0') << std::setw(4) << its_client << "): [" << std::setw(4) << its_service << "."
-                            << std::setw(4) << its_method << "." << std::setw(4) << its_session << "]";
+                            << get_remote_information() << " " << std::dec << its_queue_size << " " << std::dec << its_queue_data_size
+                            << " (" << std::hex << std::setfill('0') << std::setw(4) << its_client << "): [" << std::setw(4) << its_service
+                            << "." << std::setw(4) << its_method << "." << std::setw(4) << its_session << "]";
         }
     }
 }
