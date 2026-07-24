@@ -114,6 +114,9 @@ protected:
     // The caller must hold the `mutex_` lock
     bool check_queue_limit(const buffer_sequence_ptr_t& _sequence, std::uint32_t _size, endpoint_data_type& _endpoint_data) const;
     bool check_queue_limit(const uint8_t* _data, std::uint32_t _size, endpoint_data_type& _endpoint_data) const;
+    // Bytes held in the batching stage (train_ and dispatched_trains_) that are
+    // not yet in queue_. The caller must hold mutex_.
+    std::size_t get_pending_train_size(const endpoint_data_type& _data) const;
     // The caller must hold the `mutex_` lock
     bool queue_train(const target_data_iterator_type _it, const std::shared_ptr<train>& _train);
 

@@ -836,8 +836,13 @@ typename endpoint_impl<Protocol>::cms_ret_e client_endpoint_impl<Protocol>::segm
 template<typename Protocol>
 bool client_endpoint_impl<Protocol>::check_queue_limit(const buffer_sequence_ptr_t& _sequence, std::uint32_t _size) const {
 
-    if (endpoint_impl<Protocol>::queue_limit_ != QUEUE_SIZE_UNLIMITED
-        && (queue_size_ + _size > endpoint_impl<Protocol>::queue_limit_ || queue_size_ + _size < _size)) { // overflow protection
+    if (endpoint_impl<Protocol>::queue_limit_ == QUEUE_SIZE_UNLIMITED) {
+        return true;
+    }
+    // Account for both the flushed output queue and the batching stage still waiting to be flushed.
+    const std::size_t its_pending_train_size = get_pending_train_size();
+    if (const std::size_t its_used_size = queue_size_ + its_pending_train_size;
+        its_used_size + _size > endpoint_impl<Protocol>::queue_limit_ || its_used_size + _size < _size) { // overflow protection
         service_t its_service(0);
         method_t its_method(0);
         client_t its_client(0);
@@ -851,10 +856,25 @@ bool client_endpoint_impl<Protocol>::check_queue_limit(const buffer_sequence_ptr
         VSOMEIP_ERROR << "cei::check_queue_limit: queue size limit (" << std::dec << endpoint_impl<Protocol>::queue_limit_
                       << ") reached. Dropping message (" << std::hex << std::setfill('0') << std::setw(4) << its_client << "): ["
                       << std::setw(4) << its_service << "." << std::setw(4) << its_method << "." << std::setw(4) << its_session << "] "
-                      << "queue_size: " << std::dec << queue_size_ << " data size: " << _size;
+                      << "queue_size: " << std::dec << queue_size_ << " pending_train_size: " << its_pending_train_size
+                      << " data size: " << _size;
         return false;
     }
     return true;
+}
+
+template<typename Protocol>
+std::size_t client_endpoint_impl<Protocol>::get_pending_train_size() const {
+
+    std::size_t its_size = (train_ && train_->sequence_) ? train_->sequence_->size() : 0;
+    for (const auto& [its_departure, its_trains] : dispatched_trains_) {
+        for (const auto& its_train : its_trains) {
+            if (its_train && its_train->sequence_) {
+                its_size += its_train->sequence_->size();
+            }
+        }
+    }
+    return its_size;
 }
 
 template<typename Protocol>
@@ -876,7 +896,7 @@ template<typename Protocol>
 size_t client_endpoint_impl<Protocol>::get_queue_size() const {
 
     std::lock_guard<std::recursive_mutex> its_lock(mutex_);
-    return queue_size_;
+    return queue_size_ + get_pending_train_size();
 }
 
 template<typename Protocol>
