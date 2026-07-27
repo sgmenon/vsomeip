@@ -35,11 +35,11 @@ TEST_F(routing_manager_ut_setup, DISABLED_set_routing_state_RS_SUSPENDED) {
     // Adding a service using add_routing_info this is a local service probably need to add remotes
     // for this test
     its_manager->add_routing_info(service_, instance_, major_version_, minor_version_, ttl_, ip_address_, port_reliable, ip_address_,
-                                  port_unreliable);
+                                  port_unreliable, false, false);
 
     // remote for on avail to be called as part of the del_routing_info call
     its_manager->add_routing_info(service2_, instance2_, major_version_, minor_version_, ttl_, ip_address_remote_, port_reliable,
-                                  ip_address_remote_, port_unreliable);
+                                  ip_address_remote_, port_unreliable, false, false);
 
     // Check it was added
     auto service_list = its_manager->get_offered_services();
@@ -56,7 +56,7 @@ TEST_F(routing_manager_ut_setup, DISABLED_set_routing_state_RS_RUNNING) {
 
     // Adding a service using add_routing_info
     its_manager->add_routing_info(service_, instance_, major_version_, minor_version_, ttl_, ip_address_, port_reliable, ip_address_,
-                                  port_unreliable);
+                                  port_unreliable, false, false);
 
     // Check it was added
     auto service_list = its_manager->get_offered_services();
@@ -82,7 +82,7 @@ TEST_F(routing_manager_ut_setup, DISABLED_set_routing_state_RS_RESUMED) {
 
     // Adding a service using add_routing_info
     its_manager->add_routing_info(service_, instance_, major_version_, minor_version_, ttl_, ip_address_, port_reliable, ip_address_,
-                                  port_unreliable);
+                                  port_unreliable, false, false);
 
     // Check it was added
     auto service_list = its_manager->get_offered_services();
@@ -114,7 +114,7 @@ TEST_F(routing_manager_ut_setup, DISABLED_set_routing_state_RS_DIAGNOSIS) {
 
     // Adding a service using add_routing_info
     its_manager->add_routing_info(service_, instance_, major_version_, minor_version_, ttl_, ip_address_, port_reliable, ip_address_,
-                                  port_unreliable);
+                                  port_unreliable, false, false);
 
     // Check it was added
     auto service_list = its_manager->get_offered_services();
