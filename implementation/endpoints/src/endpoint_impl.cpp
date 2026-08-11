@@ -75,7 +75,7 @@ void endpoint_impl<Protocol>::register_error_handler(const error_handler_t& _err
 template<typename Protocol>
 instance_t endpoint_impl<Protocol>::get_instance(service_t _service) {
 
-    instance_t its_instance(0xFFFF);
+    instance_t its_instance = ANY_INSTANCE;
 
     auto its_host = endpoint_host_.lock();
     if (its_host)

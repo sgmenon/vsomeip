@@ -1805,7 +1805,7 @@ void routing_manager_impl::on_message(owned_buffer_slice _frame, endpoint* _rece
             return;
         }
 
-        if (its_instance == 0xFFFF) {
+        if (its_instance == ANY_INSTANCE) {
             VSOMEIP_ERROR << "Dropped message with no matching instanceId, [" << std::hex << std::setfill('0') << std::setw(4)
                           << its_service << "." << std::setw(4) << its_instance << "." << std::setw(4) << its_method << "." << std::setw(4)
                           << its_client << "." << std::setw(4) << its_session << "] from: " << _remote_address.to_string() << ":"
@@ -3297,7 +3297,7 @@ return_code_e routing_manager_impl::check_error(const byte_t* _data, length_t /*
                             << std::setfill('0') << std::setw(4) << its_service;
             return return_code_e::E_WRONG_PROTOCOL_VERSION;
         }
-        if (_instance == 0xFFFF) {
+        if (_instance == ANY_INSTANCE) {
             VSOMEIP_WARNING << "rmi::" << __func__ << ": Receiving endpoint is not configured for service 0x" << std::hex
                             << std::setfill('0') << std::setw(4) << its_service;
             return return_code_e::E_UNKNOWN_SERVICE;
