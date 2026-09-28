@@ -137,8 +137,8 @@ public:
     virtual std::uint32_t get_max_message_size_reliable(const std::string& _address, std::uint16_t _port) const = 0;
     virtual std::uint32_t get_max_message_size_unreliable() const = 0;
     virtual std::uint32_t get_buffer_shrink_threshold() const = 0;
-    /// LIFO pool depth for remote TCP receive buffers (0 disables pooling).
-    virtual std::uint32_t get_tcp_receive_buffer_pool_size() const = 0;
+    /// LIFO pool depth for stream receive buffers: remote TCP, local TCP, and UDS (0 disables pooling).
+    virtual std::uint32_t get_receive_buffer_pool_size() const = 0;
 
     virtual bool supports_selective_broadcasts(const boost::asio::ip::address& _address) const = 0;
 

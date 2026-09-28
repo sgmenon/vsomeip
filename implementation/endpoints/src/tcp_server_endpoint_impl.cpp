@@ -28,7 +28,7 @@ tcp_server_endpoint_impl::tcp_server_endpoint_impl(const std::shared_ptr<endpoin
                                                    const std::shared_ptr<configuration>& _configuration, bool _use_magic_cookies) :
     tcp_server_endpoint_base_impl(_endpoint_host, _routing_host, _io, _configuration), use_magic_cookies_(_use_magic_cookies),
     acceptor_(_io), buffer_shrink_threshold_(configuration_->get_buffer_shrink_threshold()),
-    tcp_receive_buffer_pool_size_(configuration_->get_tcp_receive_buffer_pool_size()),
+    receive_buffer_pool_size_(configuration_->get_receive_buffer_pool_size()),
     // send timeout after 2/3 of configured ttl, warning after 1/3
     send_timeout_(configuration_->get_sd_ttl() * 666) {
 
@@ -114,7 +114,7 @@ void tcp_server_endpoint_impl::start() {
     if (acceptor_.is_open()) {
         connection::ptr new_connection =
                 connection::create(std::dynamic_pointer_cast<tcp_server_endpoint_impl>(shared_from_this()), max_message_size_,
-                                   buffer_shrink_threshold_, tcp_receive_buffer_pool_size_, use_magic_cookies_, io_, send_timeout_);
+                                   buffer_shrink_threshold_, receive_buffer_pool_size_, use_magic_cookies_, io_, send_timeout_);
 
         acceptor_.async_accept(new_connection->get_socket(),
                                std::bind(&tcp_server_endpoint_impl::accept_cbk,
@@ -385,12 +385,12 @@ void tcp_server_endpoint_impl::disconnect_from(const client_t) {
 ///////////////////////////////////////////////////////////////////////////////
 tcp_server_endpoint_impl::connection::connection(const std::weak_ptr<tcp_server_endpoint_impl>& _server, std::uint32_t _max_message_size,
                                                  std::uint32_t _recv_buffer_size_initial, std::uint32_t _buffer_shrink_threshold,
-                                                 std::uint32_t _tcp_receive_buffer_pool_size, bool _use_magic_cookies,
+                                                 std::uint32_t _receive_buffer_pool_size, bool _use_magic_cookies,
                                                  boost::asio::io_context& _io, std::chrono::milliseconds _send_timeout) :
     socket_(_io), server_(_server), max_message_size_(_max_message_size), recv_buffer_size_initial_(_recv_buffer_size_initial),
-    recv_buffer_pool_(_tcp_receive_buffer_pool_size == 0
+    recv_buffer_pool_(_receive_buffer_pool_size == 0
                               ? nullptr
-                              : message_buffer_pool::create(_tcp_receive_buffer_pool_size, _recv_buffer_size_initial)),
+                              : message_buffer_pool::create(_receive_buffer_pool_size, _recv_buffer_size_initial)),
     recv_buffer_(_recv_buffer_size_initial, 0), recv_buffer_size_(0), missing_capacity_(0), shrink_count_(0),
     buffer_shrink_threshold_(_buffer_shrink_threshold), remote_port_(0), use_magic_cookies_(_use_magic_cookies),
     last_cookie_sent_(std::chrono::steady_clock::now() - std::chrono::seconds(11)), send_timeout_(_send_timeout),
@@ -417,12 +417,12 @@ tcp_server_endpoint_impl::connection::~connection() {
 
 tcp_server_endpoint_impl::connection::ptr
 tcp_server_endpoint_impl::connection::create(const std::weak_ptr<tcp_server_endpoint_impl>& _server, std::uint32_t _max_message_size,
-                                             std::uint32_t _buffer_shrink_threshold, std::uint32_t _tcp_receive_buffer_pool_size,
+                                             std::uint32_t _buffer_shrink_threshold, std::uint32_t _receive_buffer_pool_size,
                                              bool _magic_cookies_enabled, boost::asio::io_context& _io,
                                              std::chrono::milliseconds _send_timeout) {
     const std::uint32_t its_initial_receveive_buffer_size = VSOMEIP_SOMEIP_HEADER_SIZE + 8 + MAGIC_COOKIE_SIZE + 8;
     return ptr(new connection(_server, _max_message_size, its_initial_receveive_buffer_size, _buffer_shrink_threshold,
-                              _tcp_receive_buffer_pool_size, _magic_cookies_enabled, _io, _send_timeout));
+                              _receive_buffer_pool_size, _magic_cookies_enabled, _io, _send_timeout));
 }
 
 tcp_server_endpoint_impl::socket_type& tcp_server_endpoint_impl::connection::get_socket() {

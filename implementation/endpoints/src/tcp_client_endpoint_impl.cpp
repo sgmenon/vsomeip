@@ -43,7 +43,7 @@ tcp_client_endpoint_impl::tcp_client_endpoint_impl(const std::shared_ptr<endpoin
     use_magic_cookies_(_use_magic_cookies), last_cookie_sent_(std::chrono::steady_clock::now() - std::chrono::seconds(11)),
     recv_buffer_size_initial_(VSOMEIP_SOMEIP_HEADER_SIZE),
     recv_buffer_pool_([_configuration]() -> std::shared_ptr<message_buffer_pool> {
-        const auto depth = _configuration->get_tcp_receive_buffer_pool_size();
+        const auto depth = _configuration->get_receive_buffer_pool_size();
         if (depth == 0) {
             return nullptr;
         }

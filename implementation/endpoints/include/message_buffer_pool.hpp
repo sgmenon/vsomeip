@@ -46,6 +46,14 @@ public:
 
     explicit message_buffer_pool(private_token) { }
 
+    /** Depth 0 disables the pool. Callers then allocate per frame. */
+    static std::shared_ptr<message_buffer_pool> create_or_null(std::size_t _depth, std::size_t _initial_capacity) {
+        if (_depth == 0) {
+            return nullptr;
+        }
+        return create(_depth, _initial_capacity);
+    }
+
     message_buffer_pool(const message_buffer_pool&) = delete;
     message_buffer_pool& operator=(const message_buffer_pool&) = delete;
 
@@ -196,6 +204,56 @@ inline message_buffer_ptr_t take_stream_frame(message_buffer_t& _window, std::si
         return frame;
     }
     return std::make_shared<message_buffer_t>(_window.data() + _gap, _window.data() + _gap + _message_size);
+}
+
+/**
+ * take_stream_frame, but an empty pool allocates instead of dropping the frame.
+ * Local IPC uses this: a dropped command is not acceptable, and the common
+ * case (one command fills the used window) still moves with no memcpy.
+ */
+inline message_buffer_ptr_t take_stream_frame_keep(message_buffer_t& _window, std::size_t& _used, std::size_t _gap,
+                                                   std::size_t _message_size, std::size_t _fresh_capacity, bool& _moved,
+                                                   const std::shared_ptr<message_buffer_pool>& _pool) {
+    std::shared_ptr<message_buffer_pool> pool = _pool;
+    if (pool && pool->available() == 0) {
+        pool.reset();
+    }
+    bool dropped = false;
+    auto frame = take_stream_frame(_window, _used, _gap, _message_size, _fresh_capacity, _moved, pool, &dropped);
+    if (frame || !dropped || _moved) {
+        return frame;
+    }
+    // Copy-out lost the race for the last lease. The bytes are still in the window.
+    // A move-path drop has already cleared _used, so it must not be retried.
+    return take_stream_frame(_window, _used, _gap, _message_size, _fresh_capacity, _moved, nullptr, nullptr);
+}
+
+/**
+ * Pull one local IPC command out of a stream window.
+ *
+ * `_command_offset` / `_command_length` are the command bytes between the
+ * 4-byte start and end tags. When that framed command is the entire used
+ * region at offset 0, the window is moved and the returned slice skips both
+ * tags. Otherwise only the command bytes are copied out.
+ */
+inline owned_buffer_slice take_local_ipc_command(message_buffer_t& _window, std::size_t& _used, std::size_t _iteration_gap,
+                                                 std::size_t _command_offset, std::size_t _command_length, std::size_t _fresh_capacity,
+                                                 bool& _moved, const std::shared_ptr<message_buffer_pool>& _pool) {
+    constexpr std::size_t tag = 4;
+    _moved = false;
+    const bool fills_window = _iteration_gap == 0 && _command_offset == tag && _command_offset + _command_length + tag == _used;
+    if (fills_window) {
+        auto frame = take_stream_frame_keep(_window, _used, 0, _used, _fresh_capacity, _moved, _pool);
+        if (!frame) {
+            return {};
+        }
+        return owned_buffer_slice::slice(frame, tag, _command_length);
+    }
+    auto frame = take_stream_frame_keep(_window, _used, _command_offset, _command_length, _fresh_capacity, _moved, _pool);
+    if (!frame) {
+        return {};
+    }
+    return owned_buffer_slice::whole(std::move(frame));
 }
 
 } // namespace vsomeip_v3

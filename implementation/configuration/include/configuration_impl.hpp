@@ -152,7 +152,7 @@ public:
     VSOMEIP_EXPORT std::uint32_t get_max_message_size_reliable(const std::string& _address, std::uint16_t _port) const;
     VSOMEIP_EXPORT std::uint32_t get_max_message_size_unreliable() const;
     VSOMEIP_EXPORT std::uint32_t get_buffer_shrink_threshold() const;
-    VSOMEIP_EXPORT std::uint32_t get_tcp_receive_buffer_pool_size() const;
+    VSOMEIP_EXPORT std::uint32_t get_receive_buffer_pool_size() const;
 
     VSOMEIP_EXPORT bool supports_selective_broadcasts(const boost::asio::ip::address& _address) const;
 
@@ -501,7 +501,7 @@ protected:
     std::uint32_t max_reliable_message_size_;
     std::uint32_t max_unreliable_message_size_;
     std::uint32_t buffer_shrink_threshold_;
-    std::uint32_t tcp_receive_buffer_pool_size_;
+    std::uint32_t receive_buffer_pool_size_;
 
     std::shared_ptr<trace> trace_;
 

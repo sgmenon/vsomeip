@@ -360,6 +360,8 @@ local_uds_server_endpoint_impl::connection::connection(const std::shared_ptr<loc
                                                        std::uint32_t _max_message_size, std::uint32_t _initial_recv_buffer_size,
                                                        std::uint32_t _buffer_shrink_threshold, boost::asio::io_context& _io) :
     socket_(_io), server_(_server), recv_buffer_size_initial_(_initial_recv_buffer_size + 8), max_message_size_(_max_message_size),
+    recv_buffer_pool_(message_buffer_pool::create_or_null(_server->configuration_->get_receive_buffer_pool_size(),
+                                                          _initial_recv_buffer_size + 8)),
     recv_buffer_(recv_buffer_size_initial_, 0), recv_buffer_size_(0), missing_capacity_(0), shrink_count_(0),
     buffer_shrink_threshold_(_buffer_shrink_threshold), bound_client_(VSOMEIP_CLIENT_UNSET), bound_client_host_(""),
     assigned_client_(false), is_stopped_(true) {
@@ -658,6 +660,7 @@ void local_uds_server_endpoint_impl::connection::receive_cbk(boost::system::erro
                 }
             }
 
+            bool frame_moved = false;
             if (!message_is_empty && its_end + 3 < recv_buffer_size_ + its_iteration_gap) {
 
                 if (its_server->is_routing_endpoint_ && recv_buffer_[its_start] == byte_t(protocol::id_e::ASSIGN_CLIENT_ID)) {
@@ -690,10 +693,11 @@ void local_uds_server_endpoint_impl::connection::receive_cbk(boost::system::erro
                     its_sec_client.user = _uid;
                     its_sec_client.group = _gid;
 
-                    its_host->on_message(
-                            owned_buffer_slice::whole(std::make_shared<message_buffer_t>(&recv_buffer_[its_start],
-                                                                                        &recv_buffer_[its_start] + (its_end - its_start))),
-                            its_server.get(), false, bound_client_, &its_sec_client);
+                    auto its_command = take_local_ipc_command(recv_buffer_, recv_buffer_size_, its_iteration_gap, its_start,
+                                                             its_end - its_start, recv_buffer_size_initial_, frame_moved, recv_buffer_pool_);
+                    if (its_command.valid()) {
+                        its_host->on_message(std::move(its_command), its_server.get(), false, bound_client_, &its_sec_client);
+                    }
                 } else {
                     VSOMEIP_WARNING << std::hex << "Client 0x" << its_host->get_client()
                                     << " didn't receive VSOMEIP_ASSIGN_CLIENT as first message";
@@ -707,11 +711,13 @@ void local_uds_server_endpoint_impl::connection::receive_cbk(boost::system::erro
                         VSOMEIP_INFO << local_msg.str();
 #endif
                 calculate_shrink_count();
-                recv_buffer_size_ -= (its_end + 4 - its_iteration_gap);
+                if (!frame_moved) {
+                    recv_buffer_size_ -= (its_end + protocol::TAG_SIZE - its_iteration_gap);
+                    its_iteration_gap = its_end + protocol::TAG_SIZE;
+                }
                 missing_capacity_ = 0;
                 its_command_size = 0;
                 found_message = true;
-                its_iteration_gap = its_end + 4;
             } else {
                 if (its_iteration_gap) {
                     // Message not complete and not in front of the buffer!

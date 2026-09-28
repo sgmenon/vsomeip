@@ -13,6 +13,6 @@
 /test/unit_tests/security_policy_manager_impl_tests/policy_manager_impl_unit_test_macro.hpp
 /tools/CMakeFiles
 /Testing
-/logs
+/logs*
 !build_qnx/*
 bazel-*
