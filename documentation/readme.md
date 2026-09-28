@@ -11,6 +11,12 @@
 
 - [Standalone service discovery](./standalone-service-discovery.md)
 - [E2E scatter-gather send](./e2e-scatter-gather-send.md)
+- [Send-path copy elision](./send-copy-elision.md)
+- [Receive-path copy elision](./receive-copy-elision.md)
+
+## Working notes
+
+- [Asio threads, mutexes, and strands](./asio-strands.md)
 
 ## Multicast
 

@@ -71,7 +71,7 @@ private:
         typedef std::shared_ptr<connection> ptr;
 
         static ptr create(const std::weak_ptr<tcp_server_endpoint_impl>& _server, std::uint32_t _max_message_size,
-                          std::uint32_t _buffer_shrink_threshold, std::uint32_t _tcp_receive_buffer_pool_size, bool _use_magic_cookies,
+                          std::uint32_t _buffer_shrink_threshold, std::uint32_t _receive_buffer_pool_size, bool _use_magic_cookies,
                           boost::asio::io_context& _io, std::chrono::milliseconds _send_timeout);
 
         ~connection();
@@ -92,7 +92,7 @@ private:
     private:
         connection(const std::weak_ptr<tcp_server_endpoint_impl>& _server, std::uint32_t _max_message_size,
                    std::uint32_t _recv_buffer_size_initial, std::uint32_t _buffer_shrink_threshold,
-                   std::uint32_t _tcp_receive_buffer_pool_size, bool _use_magic_cookies, boost::asio::io_context& _io,
+                   std::uint32_t _receive_buffer_pool_size, bool _use_magic_cookies, boost::asio::io_context& _io,
                    std::chrono::milliseconds _send_timeout);
         bool send_magic_cookie(buffer_sequence_ptr_t& _sequence);
         bool is_magic_cookie(size_t _offset) const;
@@ -141,7 +141,7 @@ private:
     typedef std::map<endpoint_type, connection::ptr> connections_t;
     connections_t connections_;
     const std::uint32_t buffer_shrink_threshold_;
-    const std::uint32_t tcp_receive_buffer_pool_size_;
+    const std::uint32_t receive_buffer_pool_size_;
     const std::chrono::milliseconds send_timeout_;
 
     std::string instance_name_;

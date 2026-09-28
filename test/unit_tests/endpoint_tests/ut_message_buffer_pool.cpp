@@ -15,7 +15,9 @@ namespace {
 using vsomeip_v3::byte_t;
 using vsomeip_v3::message_buffer_pool;
 using vsomeip_v3::message_buffer_t;
+using vsomeip_v3::take_local_ipc_command;
 using vsomeip_v3::take_stream_frame;
+using vsomeip_v3::take_stream_frame_keep;
 
 TEST(message_buffer_pool_test, lease_recycles_on_last_release) {
     auto pool = message_buffer_pool::create(2, 8);
@@ -189,6 +191,69 @@ TEST(take_stream_frame_test, pool_empty_drops_without_allocating) {
     EXPECT_TRUE(moved);
     EXPECT_EQ(used, 0U);
     EXPECT_EQ(full.size(), 16U); // same window retained as drain
+}
+
+TEST(take_stream_frame_keep_test, empty_pool_allocates_on_move) {
+    auto pool = message_buffer_pool::create(1, 4);
+    auto held = pool->try_lease(4);
+    ASSERT_EQ(pool->available(), 0U);
+
+    message_buffer_t window{1, 2, 3, 4};
+    std::size_t used = 4;
+    bool moved = false;
+    auto frame = take_stream_frame_keep(window, used, 0, 4, 8, moved, pool);
+    ASSERT_NE(frame, nullptr);
+    EXPECT_TRUE(moved);
+    EXPECT_EQ(used, 0U);
+    ASSERT_EQ(frame->size(), 4U);
+    EXPECT_EQ((*frame)[0], byte_t{1});
+    EXPECT_EQ((*frame)[3], byte_t{4});
+    (void)held;
+}
+
+TEST(take_local_ipc_command_test, moves_and_strips_tags_when_frame_fills_window) {
+    message_buffer_t window{0x67, 0x37, 0x6d, 0x07, 0x11, 0x22, 0x33, 0x07, 0x6d, 0x37, 0x67};
+    std::size_t used = window.size();
+    bool moved = false;
+    auto slice = take_local_ipc_command(window, used, 0, 4, 3, 8, moved, nullptr);
+    EXPECT_TRUE(moved);
+    EXPECT_EQ(used, 0U);
+    ASSERT_TRUE(slice.valid());
+    EXPECT_EQ(slice.length, 3U);
+    EXPECT_EQ(slice.offset, 4U);
+    EXPECT_EQ(slice.buffer->at(slice.offset), byte_t{0x11});
+    EXPECT_EQ(slice.buffer->at(slice.offset + 2), byte_t{0x33});
+}
+
+TEST(take_local_ipc_command_test, copies_command_when_bytes_follow) {
+    message_buffer_t window{0x67, 0x37, 0x6d, 0x07, 0x11, 0x22, 0x33, 0x07, 0x6d, 0x37, 0x67, 0xAA};
+    const std::size_t original = window.size();
+    std::size_t used = original;
+    bool moved = false;
+    auto slice = take_local_ipc_command(window, used, 0, 4, 3, 8, moved, nullptr);
+    EXPECT_FALSE(moved);
+    EXPECT_EQ(used, original);
+    ASSERT_TRUE(slice.valid());
+    EXPECT_EQ(slice.length, 3U);
+    EXPECT_EQ(slice.buffer->size(), 3U);
+    EXPECT_EQ((*slice.buffer)[0], byte_t{0x11});
+    EXPECT_EQ(window.back(), byte_t{0xAA});
+}
+
+TEST(take_local_ipc_command_test, empty_pool_still_returns_command) {
+    auto pool = message_buffer_pool::create(1, 4);
+    auto held = pool->try_lease(4);
+    ASSERT_EQ(pool->available(), 0U);
+
+    message_buffer_t window{0x67, 0x37, 0x6d, 0x07, 0x11, 0x22, 0x33, 0x07, 0x6d, 0x37, 0x67};
+    std::size_t used = window.size();
+    bool moved = false;
+    auto slice = take_local_ipc_command(window, used, 0, 4, 3, 8, moved, pool);
+    ASSERT_TRUE(slice.valid());
+    EXPECT_TRUE(moved);
+    EXPECT_EQ(slice.length, 3U);
+    EXPECT_EQ(slice.buffer->at(slice.offset), byte_t{0x11});
+    (void)held;
 }
 
 } // namespace

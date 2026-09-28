@@ -16,6 +16,7 @@
 #include <vsomeip/defines.hpp>
 
 #include "buffer.hpp"
+#include "message_buffer_pool.hpp"
 #include "server_endpoint_impl.hpp"
 
 namespace vsomeip_v3 {
@@ -116,6 +117,7 @@ private:
         const std::uint32_t recv_buffer_size_initial_;
         const std::uint32_t max_message_size_;
 
+        std::shared_ptr<message_buffer_pool> recv_buffer_pool_;
         message_buffer_t recv_buffer_;
         size_t recv_buffer_size_;
         std::uint32_t missing_capacity_;

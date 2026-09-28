@@ -59,7 +59,7 @@ configuration_impl::configuration_impl(const std::string& _path) :
     sd_wait_route_netlink_notification_{VSOMEIP_SD_WAIT_ROUTE_NETLINK_NOTIFICATION},
     sd_stop_offer_watchdog_time_{VSOMEIP_SD_STOP_OFFER_WATCHDOG_TIME}, max_configured_message_size_{0}, max_local_message_size_{0},
     max_reliable_message_size_{0}, max_unreliable_message_size_{0}, buffer_shrink_threshold_{VSOMEIP_DEFAULT_BUFFER_SHRINK_THRESHOLD},
-    tcp_receive_buffer_pool_size_{VSOMEIP_DEFAULT_TCP_RECEIVE_BUFFER_POOL_SIZE},
+    receive_buffer_pool_size_{VSOMEIP_DEFAULT_RECEIVE_BUFFER_POOL_SIZE},
     trace_{std::make_shared<trace>()}, watchdog_{std::make_shared<watchdog>()},
     local_clients_keepalive_{std::make_shared<local_clients_keepalive>()}, log_version_{true},
     log_version_interval_{VSOMEIP_DEFAULT_LOG_INTERVAL}, permissions_uds_{VSOMEIP_DEFAULT_UDS_PERMISSIONS}, network_{"vsomeip"},
@@ -103,7 +103,7 @@ configuration_impl::configuration_impl(const configuration_impl& _other) :
     max_configured_message_size_{_other.max_configured_message_size_}, max_local_message_size_{_other.max_local_message_size_},
     max_reliable_message_size_{_other.max_reliable_message_size_}, max_unreliable_message_size_{_other.max_unreliable_message_size_},
     buffer_shrink_threshold_{_other.buffer_shrink_threshold_},
-    tcp_receive_buffer_pool_size_{_other.tcp_receive_buffer_pool_size_}, permissions_uds_{VSOMEIP_DEFAULT_UDS_PERMISSIONS},
+    receive_buffer_pool_size_{_other.receive_buffer_pool_size_}, permissions_uds_{VSOMEIP_DEFAULT_UDS_PERMISSIONS},
     endpoint_queue_limit_external_{_other.endpoint_queue_limit_external_}, endpoint_queue_limit_local_{_other.endpoint_queue_limit_local_},
     tcp_restart_aborts_max_{_other.tcp_restart_aborts_max_}, tcp_connect_time_max_{_other.tcp_connect_time_max_},
     udp_receive_buffer_size_{_other.udp_receive_buffer_size_}, npdu_default_debounce_requ_{_other.npdu_default_debounce_requ_},
@@ -2461,7 +2461,7 @@ void configuration_impl::load_payload_sizes(const configuration_element& _elemen
     const std::string payload_sizes("payload-sizes");
     const std::string max_local_payload_size("max-payload-size-local");
     const std::string buffer_shrink_threshold("buffer-shrink-threshold");
-    const std::string tcp_receive_buffer_pool_size("tcp-receive-buffer-pool-size");
+    const std::string receive_buffer_pool_size("receive-buffer-pool-size");
     const std::string max_reliable_payload_size("max-payload-size-reliable");
     const std::string max_unreliable_payload_size("max-payload-size-unreliable");
     try {
@@ -2493,13 +2493,13 @@ void configuration_impl::load_payload_sizes(const configuration_element& _elemen
                 VSOMEIP_ERROR << __func__ << ": " << buffer_shrink_threshold << " " << e.what();
             }
         }
-        if (_element.tree_.get_child_optional(tcp_receive_buffer_pool_size)) {
-            auto its_child = _element.tree_.get_child(tcp_receive_buffer_pool_size);
+        if (_element.tree_.get_child_optional(receive_buffer_pool_size)) {
+            auto its_child = _element.tree_.get_child(receive_buffer_pool_size);
             std::string s(its_child.data());
             try {
-                tcp_receive_buffer_pool_size_ = static_cast<std::uint32_t>(std::stoul(s.c_str(), NULL, 10));
+                receive_buffer_pool_size_ = static_cast<std::uint32_t>(std::stoul(s.c_str(), NULL, 10));
             } catch (const std::exception& e) {
-                VSOMEIP_ERROR << __func__ << ": " << tcp_receive_buffer_pool_size << " " << e.what();
+                VSOMEIP_ERROR << __func__ << ": " << receive_buffer_pool_size << " " << e.what();
             }
         }
         if (_element.tree_.get_child_optional(payload_sizes)) {
@@ -3452,8 +3452,8 @@ std::uint32_t configuration_impl::get_buffer_shrink_threshold() const {
     return buffer_shrink_threshold_;
 }
 
-std::uint32_t configuration_impl::get_tcp_receive_buffer_pool_size() const {
-    return tcp_receive_buffer_pool_size_;
+std::uint32_t configuration_impl::get_receive_buffer_pool_size() const {
+    return receive_buffer_pool_size_;
 }
 
 bool configuration_impl::supports_selective_broadcasts(const boost::asio::ip::address& _address) const {

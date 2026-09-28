@@ -7,7 +7,7 @@
 > will double-size on the wire — which is a feature if you like oversized
 > CRCs, and a bug if you do not.
 
-## 1. Why this belongs in mainline
+## 1. Summary
 
 E2E protection is supposed to be a stack concern. In practice, old vsomeip
 asked applications to know header sizes, leave placeholder bytes in the
