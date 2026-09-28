@@ -48,12 +48,19 @@ bazel_dep(name = "bazel-toolchains", version = "1.0.0", dev_dependency = True)
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5", dev_dependency = True)
 bazel_dep(name = "googletest", version = "1.16.0", dev_dependency = True)
 bazel_dep(name = "rules_pkg", version = "1.1.0", dev_dependency = True)
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 
 archive_override(
     module_name = "bazel-toolchains",
     sha256 = "d24974390cca9f9de91b28ec98baae02d87785f9a36fa66035320f61378b6c38",
     strip_prefix = "bazel-toolchains-1.0.0",
     url = "https://github.com/sgmenon/bazel-toolchains/archive/refs/tags/v1.0.0.tar.gz",
+)
+
+git_override(
+    module_name = "hedron_compile_commands",
+    commit = "abb61a688167623088f8768cc9264798df6a9d10",
+    remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
 )
 
 gcc_toolchain_extension = use_extension("@bazel-toolchains//gcc_toolchain:toolchain_extension.bzl", "gcc_toolchain_extension", dev_dependency = True)
