@@ -220,6 +220,7 @@ bool tcp_server_endpoint_impl::send_queued(const target_data_iterator_type _it) 
             }
 
             // Drop outstanding messages.
+            fail_queue_completions(_it->second.queue_);
             _it->second.queue_.clear();
             must_erase = true;
         }

@@ -122,6 +122,7 @@ void client_endpoint_impl<Protocol>::stop(bool _due_to_error) {
         std::lock_guard<std::recursive_mutex> its_lock(mutex_);
         endpoint_impl<Protocol>::sending_blocked_ = true;
         // delete unsent messages
+        fail_queue_completions(queue_);
         queue_.clear();
         queue_size_ = 0;
     }
@@ -511,17 +512,6 @@ void client_endpoint_impl<Protocol>::wait_connecting_cbk(boost::system::error_co
                      << to_string(state_.load());
     }
 }
-
-namespace {
-template<typename Queue>
-void fail_queue_completions(Queue& _queue) {
-    for (auto& its_entry : _queue) {
-        if (its_entry.first) {
-            its_entry.first->complete(false);
-        }
-    }
-}
-} // namespace
 
 template<typename Protocol>
 void client_endpoint_impl<Protocol>::send_cbk(boost::system::error_code const& _error, std::size_t _bytes,

@@ -180,6 +180,7 @@ void udp_client_endpoint_impl::restart(bool _force) {
     }
     {
         std::lock_guard<std::recursive_mutex> its_lock(mutex_);
+        fail_queue_completions(queue_);
         queue_.clear();
     }
     std::string local;

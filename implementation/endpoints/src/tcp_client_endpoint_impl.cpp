@@ -125,6 +125,7 @@ void tcp_client_endpoint_impl::restart(bool _force) {
                                 << std::setw(4) << its_session << "]"
                                 << " size: " << std::dec << q.first->size();
             }
+            fail_queue_completions(self->queue_);
             self->queue_.clear();
             self->queue_size_ = 0;
             self->is_sending_ = false;

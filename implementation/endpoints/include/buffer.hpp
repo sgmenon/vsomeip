@@ -320,6 +320,19 @@ private:
 
 typedef std::shared_ptr<buffer_sequence> buffer_sequence_ptr_t;
 
+/**
+ * Fail the completions of every entry in a send queue. Must be called before
+ * a queue is dropped, otherwise the send completion handlers never fire.
+ */
+template<typename Queue>
+void fail_queue_completions(Queue& _queue) {
+    for (auto& its_entry : _queue) {
+        if (its_entry.first) {
+            its_entry.first->complete(false);
+        }
+    }
+}
+
 struct train {
     train() :
         sequence_(std::make_shared<buffer_sequence>()), minimal_debounce_time_(DEFAULT_NANOSECONDS_MAX),
