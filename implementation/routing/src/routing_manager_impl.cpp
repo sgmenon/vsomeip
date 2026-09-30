@@ -346,7 +346,7 @@ void routing_manager_impl::init() {
     if (configuration_->is_sd_enabled()) {
         VSOMEIP_INFO << "Service Discovery enabled. Trying to load module.";
 
-        const char *its_sd_module = getenv(VSOMEIP_ENV_SD_MODULE);
+        const char *its_sd_module = VSOMEIP_GETENV(VSOMEIP_ENV_SD_MODULE);
         std::string plugin_name = its_sd_module != nullptr ? its_sd_module : VSOMEIP_SD_LIBRARY;
         auto its_plugin = plugin_manager::get()->get_plugin(plugin_type_e::SD_RUNTIME_PLUGIN, plugin_name);
 

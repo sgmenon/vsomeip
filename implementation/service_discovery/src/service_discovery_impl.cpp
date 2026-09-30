@@ -69,7 +69,7 @@ boost::asio::io_context& service_discovery_impl::get_io() {
 }
 
 void service_discovery_impl::init() {
-    const char *its_sd_module = getenv(VSOMEIP_ENV_SD_MODULE);
+    const char *its_sd_module = VSOMEIP_GETENV(VSOMEIP_ENV_SD_MODULE);
     std::string plugin_name = its_sd_module != nullptr ? its_sd_module : VSOMEIP_SD_LIBRARY;
 
     VSOMEIP_INFO << "Get SD plugin " << plugin_name;
