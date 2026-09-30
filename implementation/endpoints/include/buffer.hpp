@@ -241,10 +241,7 @@ struct buffer_sequence {
 
     bool has_completion() const { return !completions_.empty(); }
 
-    std::size_t size() const {
-        return std::accumulate(segments_.begin(), segments_.end(), std::size_t{0},
-                               [](std::size_t sum, const owned_buffer_slice& s) { return sum + s.size(); });
-    }
+    std::size_t size() const { return size_; }
 
     bool empty() const { return size() == 0; }
 
@@ -304,15 +301,18 @@ private:
     void rebuild_buffers() {
         buffers_.clear();
         buffers_.reserve(segments_.size());
+        size_ = 0;
         for (const auto& its_segment : segments_) {
             const byte_t* its_data = its_segment.data();
             const auto its_length = its_segment.size();
+            size_ += its_length;
             if (its_data && its_length > 0) {
                 buffers_.emplace_back(boost::asio::buffer(its_data, its_length));
             }
         }
     }
 
+    std::size_t size_{0};
     std::vector<owned_buffer_slice> segments_;
     std::vector<boost::asio::const_buffer> buffers_;
     std::vector<send_completion_state_ptr_t> completions_;
