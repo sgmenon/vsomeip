@@ -704,21 +704,6 @@ void service_discovery_impl::insert_offer_entries(std::vector<std::shared_ptr<me
     }
 }
 
-bool service_discovery_impl::has_unreceived_field_value(const std::shared_ptr<subscription>& _subscription) const {
-    if (auto its_info = _subscription->get_eventgroupinfo().lock()) {
-        for (const auto& its_event : its_info->get_events()) {
-            if (its_event->is_field() && !its_event->is_set()) {
-                VSOMEIP_WARNING << "Field value for [" << std::hex << std::setfill('0') << std::setw(4) << its_event->get_service() << "."
-                                << std::setw(4) << its_event->get_instance() << "." << std::setw(4) << its_info->get_eventgroup() << "."
-                                << std::setw(4) << its_event->get_event() << "] not yet received.";
-                return true;
-            }
-        }
-    }
-
-    return false;
-}
-
 entry_data_t service_discovery_impl::create_eventgroup_entry(service_t _service, instance_t _instance, eventgroup_t _eventgroup,
                                                              const std::shared_ptr<subscription>& _subscription,
                                                              reliability_type_e _reliability_type) {
@@ -1461,11 +1446,7 @@ void service_discovery_impl::process_offerservice_serviceentry(service_t _servic
                         its_subscription->set_endpoint(its_unreliable, false);
                         for (const auto& its_client : its_subscription->get_clients()) {
                             if (its_subscription->get_state(its_client) == subscription_state_e::ST_ACKNOWLEDGED) {
-                                if (has_unreceived_field_value(its_subscription)) {
-                                    its_subscription->set_state(its_client, subscription_state_e::ST_RESUBSCRIBING_NOT_ACKNOWLEDGED);
-                                } else {
-                                    its_subscription->set_state(its_client, subscription_state_e::ST_RESUBSCRIBING);
-                                }
+                                its_subscription->set_state(its_client, subscription_state_e::ST_RESUBSCRIBING);
                             } else if (its_subscription->get_state(its_client) != subscription_state_e::ST_ACKNOWLEDGED
                                        && was_previously_offered_by_unicast) {
                                 its_subscription->set_state(its_client, subscription_state_e::ST_RESUBSCRIBING);
