@@ -343,7 +343,8 @@ public:
     // unreliable side.
     void add_routing_info(v3::service_t service, v3::instance_t instance, v3::major_version_t major, v3::minor_version_t /*minor*/,
                           v3::ttl_t /*ttl*/, const boost::asio::ip::address& reliable_addr, uint16_t reliable_port,
-                          const boost::asio::ip::address& unreliable_addr, uint16_t unreliable_port) override {
+                          const boost::asio::ip::address& unreliable_addr, uint16_t unreliable_port, bool /*is_reliable_known*/,
+                          bool /*is_unreliable_known*/) override {
         {
             std::lock_guard lock{learned_mutex_};
             auto& entry = learned_offers_[{service, instance}];
@@ -366,6 +367,16 @@ public:
         std::cout << os.str() << '\n';
 
         if (on_remote_offer_) on_remote_offer_(service, instance, static_cast<v3::major_version_t>(major));
+    }
+
+    // Every OFFER is recorded, including one that moves to a new endpoint,
+    // so nothing is ever reported as known and no offer is dropped.
+    void is_remote_service_known(v3::service_t, v3::instance_t, v3::major_version_t, v3::minor_version_t, const boost::asio::ip::address&,
+                                 uint16_t, bool& reliable_known, const boost::asio::ip::address&, uint16_t, bool& unreliable_known,
+                                 bool& drop_offer) override {
+        reliable_known = false;
+        unreliable_known = false;
+        drop_offer = false;
     }
 
     void del_routing_info(v3::service_t service, v3::instance_t instance, bool /*has_reliable*/, bool /*has_unreliable*/,
