@@ -268,11 +268,18 @@ client_t utility::request_client_id(const std::shared_ptr<configuration>& _confi
             r->second.used_clients_[_client] = _name;
             return _client;
         } else { // already in use
+            // We cannot check if name is the same as there are SEVERAL apps
+            // that do not specify the vsomeip application name
 
-            // The name matches the assigned name --> return client
-            // NOTE: THIS REQUIRES A CONSISTENT CONFIGURATION!!!
-            if (its_iterator->second == _name) {
-                return _client;
+            // check if app name is configured
+            if (auto config_id = _config->get_id(_name); config_id != VSOMEIP_CLIENT_UNSET) {
+                if (config_id == _client) {
+                    return _client;
+                } else {
+                    VSOMEIP_ERROR << "Configured client requested different client-id (" << std::hex << std::setfill('0') << std::setw(4)
+                                  << _client << "), assigning configured client-id: " << std::setw(4) << config_id;
+                    return config_id;
+                }
             }
 
             VSOMEIP_WARNING << "Requested client identifier " << std::hex << std::setfill('0') << std::setw(4) << _client
