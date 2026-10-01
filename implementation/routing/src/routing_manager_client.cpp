@@ -2296,8 +2296,16 @@ void routing_manager_client::init_receiver() {
     its_policy_manager->store_sec_client_to_client_mapping(&sec_client, get_client());
 #endif
     std::scoped_lock rec_lock(receiver_mutex_);
+    if (receiver_ && receiver_client_ != get_client()) {
+        // The local UDS server path is derived from the client identifier.
+        VSOMEIP_INFO << "Recreating local server endpoint, client changed from " << std::hex << std::setfill('0') << std::setw(4)
+                     << receiver_client_ << " to " << std::setw(4) << get_client();
+        receiver_->stop(false);
+        receiver_ = nullptr;
+    }
     if (!receiver_) {
         receiver_ = ep_mgr_->create_local_server(shared_from_this());
+        receiver_client_ = get_client();
     } else {
         std::uint16_t its_port = receiver_->get_local_port();
         if (its_port != ILLEGAL_PORT)
