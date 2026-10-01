@@ -215,6 +215,7 @@ private:
 
     mutable std::mutex receiver_mutex_;
     std::shared_ptr<endpoint> receiver_; // --> from everybody
+    client_t receiver_client_{VSOMEIP_CLIENT_UNSET};
 
     std::mutex pending_offers_mutex_;
     std::set<protocol::service> pending_offers_;

@@ -1,0 +1,13 @@
+{
+    "unicast":"@TEST_IP_MASTER@",
+    "logging":
+    {
+        "level":"trace",
+        "console":"true"
+    },
+    "tracing" :
+    {
+        "enable" : "true"
+    },
+    "routing" : "routingmanagerd"
+}

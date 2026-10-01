@@ -39,13 +39,14 @@ private:
     std::uint32_t max_message_size_;
     std::uint32_t current_message_size_;
     bool last_segment_received_;
+    bool header_received_;
 
     struct segment_t {
         segment_t(std::uint32_t _start, std::uint32_t _end) : start_(_start), end_(_end) { }
 
         bool operator<(const segment_t& _other) const {
-            return start_ < _other.start_ || ((start_ >= _other.start_) && (end_ < _other.end_));
-        };
+            return start_ < _other.start_ || (start_ == _other.start_ && end_ < _other.end_);
+        }
 
         std::uint32_t start_;
         std::uint32_t end_;

@@ -126,44 +126,40 @@ void endpoint_manager_impl::find_or_create_remote_client(service_t _service, ins
 
 void endpoint_manager_impl::is_remote_service_known(service_t _service, instance_t _instance, major_version_t _major,
                                                     minor_version_t _minor, const boost::asio::ip::address& _reliable_address,
-                                                    uint16_t _reliable_port, bool* _reliable_known,
+                                                    uint16_t _reliable_port, bool& _reliable_known,
                                                     const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port,
-                                                    bool* _unreliable_known) const {
+                                                    bool& _unreliable_known, bool& _drop_offer) const {
+
+    _drop_offer = false;
+
+    auto drop = [&](const char* _kind, const boost::asio::ip::address& _address, uint16_t _port) {
+        VSOMEIP_WARNING << "Received offer for [" << std::hex << std::setfill('0') << std::setw(4) << _service << "." << std::setw(4)
+                        << _instance << "." << std::dec << static_cast<std::uint32_t>(_major) << "." << _minor << "] with different "
+                        << _kind << " endpoint: " << _address.to_string() << ":" << _port << ", dropping the offer";
+        _drop_offer = true;
+    };
 
     std::lock_guard<std::recursive_mutex> its_lock(endpoint_mutex_);
     auto found_service = remote_service_info_.find(_service);
     if (found_service != remote_service_info_.end()) {
         auto found_instance = found_service->second.find(_instance);
         if (found_instance != found_service->second.end()) {
-            std::shared_ptr<endpoint_definition> its_definition;
             if (_reliable_port != ILLEGAL_PORT) {
                 auto found_reliable = found_instance->second.find(true);
-                if (found_reliable != found_instance->second.end()) {
-                    its_definition = found_reliable->second;
-                    if (its_definition->get_address() == _reliable_address && its_definition->get_port() == _reliable_port) {
-                        *_reliable_known = true;
-                    } else {
-                        VSOMEIP_WARNING << "Reliable service endpoint has changed: [" << std::hex << std::setfill('0') << std::setw(4)
-                                        << _service << "." << std::setw(4) << _instance << "." << std::dec
-                                        << static_cast<std::uint32_t>(_major) << "." << _minor
-                                        << "] old: " << its_definition->get_address().to_string() << ":" << its_definition->get_port()
-                                        << " new: " << _reliable_address.to_string() << ":" << _reliable_port;
-                    }
+                if (found_reliable != found_instance->second.end() && found_reliable->second->get_address() == _reliable_address
+                    && found_reliable->second->get_port() == _reliable_port) {
+                    _reliable_known = true;
+                } else {
+                    drop("reliable", _reliable_address, _reliable_port);
                 }
             }
             if (_unreliable_port != ILLEGAL_PORT) {
                 auto found_unreliable = found_instance->second.find(false);
-                if (found_unreliable != found_instance->second.end()) {
-                    its_definition = found_unreliable->second;
-                    if (its_definition->get_address() == _unreliable_address && its_definition->get_port() == _unreliable_port) {
-                        *_unreliable_known = true;
-                    } else {
-                        VSOMEIP_WARNING << "Unreliable service endpoint has changed: [" << std::hex << std::setfill('0') << std::setw(4)
-                                        << _service << "." << std::setw(4) << _instance << "." << std::dec
-                                        << static_cast<std::uint32_t>(_major) << "." << _minor
-                                        << "] old: " << its_definition->get_address().to_string() << ":" << its_definition->get_port()
-                                        << " new: " << _unreliable_address.to_string() << ":" << _unreliable_port;
-                    }
+                if (found_unreliable != found_instance->second.end() && found_unreliable->second->get_address() == _unreliable_address
+                    && found_unreliable->second->get_port() == _unreliable_port) {
+                    _unreliable_known = true;
+                } else {
+                    drop("unreliable", _unreliable_address, _unreliable_port);
                 }
             }
         }
@@ -188,9 +184,10 @@ void endpoint_manager_impl::add_remote_service_info(service_t _service, instance
         }
     }
 
-    if (must_report)
+    if (must_report && its_info) {
         static_cast<routing_manager_impl*>(rm_)->service_endpoint_connected(_service, _instance, its_info->get_major(),
                                                                             its_info->get_minor(), its_endpoint);
+    }
 }
 
 void endpoint_manager_impl::add_remote_service_info(service_t _service, instance_t _instance,
@@ -215,7 +212,7 @@ void endpoint_manager_impl::add_remote_service_info(service_t _service, instance
             its_info = rm_->find_service(_service, _instance);
     }
 
-    if (must_report) {
+    if (must_report && its_info) {
         static_cast<routing_manager_impl*>(rm_)->service_endpoint_connected(_service, _instance, its_info->get_major(),
                                                                             its_info->get_minor(), its_unreliable);
         static_cast<routing_manager_impl*>(rm_)->service_endpoint_connected(_service, _instance, its_info->get_major(),
@@ -762,7 +759,7 @@ bool endpoint_manager_impl::create_routing_root(std::shared_ptr<endpoint>& _root
 }
 
 instance_t endpoint_manager_impl::find_instance(service_t _service, endpoint* const _endpoint) const {
-    instance_t its_instance(0xFFFF);
+    instance_t its_instance = ANY_INSTANCE;
     std::lock_guard<std::recursive_mutex> its_lock(endpoint_mutex_);
     auto found_service = service_instances_.find(_service);
     if (found_service != service_instances_.end()) {
@@ -775,7 +772,7 @@ instance_t endpoint_manager_impl::find_instance(service_t _service, endpoint* co
 }
 
 instance_t endpoint_manager_impl::find_instance_multicast(service_t _service, const boost::asio::ip::address& _sender) const {
-    instance_t its_instance(0xFFFF);
+    instance_t its_instance = ANY_INSTANCE;
     std::lock_guard<std::recursive_mutex> its_lock(endpoint_mutex_);
     auto found_service = service_instances_multicast_.find(_service);
     if (found_service != service_instances_multicast_.end()) {

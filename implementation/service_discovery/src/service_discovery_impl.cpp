@@ -69,7 +69,7 @@ boost::asio::io_context& service_discovery_impl::get_io() {
 }
 
 void service_discovery_impl::init() {
-    const char *its_sd_module = getenv(VSOMEIP_ENV_SD_MODULE);
+    const char *its_sd_module = VSOMEIP_GETENV(VSOMEIP_ENV_SD_MODULE);
     std::string plugin_name = its_sd_module != nullptr ? its_sd_module : VSOMEIP_SD_LIBRARY;
 
     VSOMEIP_INFO << "Get SD plugin " << plugin_name;
@@ -694,9 +694,9 @@ void service_discovery_impl::insert_offer_entries(std::vector<std::shared_ptr<me
         for (const auto& its_instance : its_service.second) {
             if ((!is_suspended_)
                 && ((!is_diagnosis_) || (is_diagnosis_ && !configuration_->is_someip(its_service.first, its_instance.first)))) {
-                // Only insert services with configured endpoint(s)
-                if ((_ignore_phase || its_instance.second->is_in_mainphase())
-                    && (its_instance.second->get_endpoint(false) || its_instance.second->get_endpoint(true))) {
+                // Only insert services that are ready to be offered. A service configured with both
+                // reliable and unreliable endpoints is withheld until BOTH endpoints are up.
+                if ((_ignore_phase || its_instance.second->is_in_mainphase()) && its_instance.second->is_ready_to_offer()) {
                     insert_offer_service(_messages, its_instance.second);
                 }
             }
@@ -1347,6 +1347,18 @@ void service_discovery_impl::process_offerservice_serviceentry(service_t _servic
         return; // Unknown remote offer type --> no way to access it!
     }
 
+    bool is_reliable_known(false);
+    bool is_unreliable_known(false);
+    bool drop_offer(false);
+    host_->is_remote_service_known(_service, _instance, _major, _minor, _reliable_address, _reliable_port, is_reliable_known,
+                                   _unreliable_address, _unreliable_port, is_unreliable_known, drop_offer);
+
+    if (drop_offer) {
+        VSOMEIP_WARNING << "sdi::" << __func__ << ": Dropping offer for [" << std::hex << std::setfill('0') << std::setw(4) << _service
+                        << "." << std::setw(4) << _instance << "] due to endpoint mismatch";
+        return;
+    }
+
     if (_sd_ac_state.sd_acceptance_required_) {
 
         auto expire_subscriptions_and_services = [this, &_sd_ac_state, _service, _instance](const boost::asio::ip::address& _address,
@@ -1460,7 +1472,8 @@ void service_discovery_impl::process_offerservice_serviceentry(service_t _servic
     }
 
     host_->add_routing_info(_service, _instance, _major, _minor, _ttl * get_ttl_factor(_service, _instance, ttl_factor_offers_),
-                            _reliable_address, _reliable_port, _unreliable_address, _unreliable_port);
+                            _reliable_address, _reliable_port, _unreliable_address, _unreliable_port, is_reliable_known,
+                            is_unreliable_known);
 }
 
 void service_discovery_impl::process_findservice_serviceentry(service_t _service, instance_t _instance, major_version_t _major,
@@ -1468,12 +1481,10 @@ void service_discovery_impl::process_findservice_serviceentry(service_t _service
 
     if (_instance != ANY_INSTANCE) {
         std::shared_ptr<serviceinfo> its_info = host_->get_offered_service(_service, _instance);
-        if (its_info) {
+        if (its_info && its_info->is_ready_to_offer()) {
             if (_major == ANY_MAJOR || _major == its_info->get_major()) {
                 if (_minor == 0xFFFFFFFF || _minor <= its_info->get_minor()) {
-                    if (its_info->get_endpoint(false) || its_info->get_endpoint(true)) {
-                        send_uni_or_multicast_offerservice(its_info, _unicast_flag);
-                    }
+                    send_uni_or_multicast_offerservice(its_info, _unicast_flag);
                 }
             }
         }
@@ -1482,11 +1493,12 @@ void service_discovery_impl::process_findservice_serviceentry(service_t _service
         // send back all available instances
         for (const auto& found_instance : offered_instances) {
             auto its_info = found_instance.second;
+            if (!its_info->is_ready_to_offer()) {
+                continue;
+            }
             if (_major == ANY_MAJOR || _major == its_info->get_major()) {
                 if (_minor == 0xFFFFFFFF || _minor <= its_info->get_minor()) {
-                    if (its_info->get_endpoint(false) || its_info->get_endpoint(true)) {
-                        send_uni_or_multicast_offerservice(its_info, _unicast_flag);
-                    }
+                    send_uni_or_multicast_offerservice(its_info, _unicast_flag);
                 }
             }
         }

@@ -346,7 +346,7 @@ void routing_manager_impl::init() {
     if (configuration_->is_sd_enabled()) {
         VSOMEIP_INFO << "Service Discovery enabled. Trying to load module.";
 
-        const char *its_sd_module = getenv(VSOMEIP_ENV_SD_MODULE);
+        const char *its_sd_module = VSOMEIP_GETENV(VSOMEIP_ENV_SD_MODULE);
         std::string plugin_name = its_sd_module != nullptr ? its_sd_module : VSOMEIP_SD_LIBRARY;
         auto its_plugin = plugin_manager::get()->get_plugin(plugin_type_e::SD_RUNTIME_PLUGIN, plugin_name);
 
@@ -366,7 +366,7 @@ void routing_manager_impl::init() {
     if (configuration_->is_e2e_enabled()) {
         VSOMEIP_INFO << "E2E protection enabled.";
 
-        const char* its_e2e_module = getenv(VSOMEIP_ENV_E2E_PROTECTION_MODULE);
+        const char* its_e2e_module = VSOMEIP_GETENV(VSOMEIP_ENV_E2E_PROTECTION_MODULE);
         std::string plugin_name = its_e2e_module != nullptr ? its_e2e_module : VSOMEIP_E2E_LIBRARY;
 
         auto its_plugin = plugin_manager::get()->get_plugin(plugin_type_e::APPLICATION_PLUGIN, plugin_name);
@@ -729,8 +729,11 @@ void routing_manager_impl::request_service(client_t _client, service_t _service,
     } else {
         if ((_major == its_info->get_major() || DEFAULT_MAJOR == its_info->get_major() || ANY_MAJOR == _major)
             && (_minor <= its_info->get_minor() || DEFAULT_MINOR == its_info->get_minor() || _minor == ANY_MINOR)) {
+            // Record the request even for a locally offered service: if the local provider later
+            // stops offering and a remote provider takes over, responses to this client would
+            // otherwise be dropped as orphaned.
+            add_requested_service(_client, _service, _instance, _major, _minor);
             if (!its_info->is_local()) {
-                add_requested_service(_client, _service, _instance, _major, _minor);
                 if (discovery_) {
                     // Non local service instance ~> tell SD to find it!
                     discovery_->request_service(_service, _instance, _major, _minor, DEFAULT_TTL);
@@ -1097,7 +1100,7 @@ bool routing_manager_impl::send_with_sequence(client_t _client, buffer_sequence_
                                       _status_check);
         } else {
             if (is_request) {
-                its_target = ep_mgr_impl_->find_or_create_remote_client(its_service, _instance, _reliable);
+                its_target = find_remote_client_for_request(its_client, its_service, _instance, its_method, _reliable);
                 if (its_target) {
                     if (_completion) {
                         _sequence->attach_completion(_completion);
@@ -1309,7 +1312,7 @@ bool routing_manager_impl::send(client_t _client, message_buffer_ptr_t _frame, i
 #endif
             }
             if (is_request) {
-                its_target = ep_mgr_impl_->find_or_create_remote_client(its_service, _instance, _reliable);
+                its_target = find_remote_client_for_request(its_client, its_service, _instance, its_method, _reliable);
                 if (its_target) {
                     auto its_sequence = its_e2e_sequence ? its_e2e_sequence : build_unprotected_sequence();
                     is_sent = its_target->send(its_sequence);
@@ -1805,7 +1808,7 @@ void routing_manager_impl::on_message(owned_buffer_slice _frame, endpoint* _rece
             return;
         }
 
-        if (its_instance == 0xFFFF) {
+        if (its_instance == ANY_INSTANCE) {
             VSOMEIP_ERROR << "Dropped message with no matching instanceId, [" << std::hex << std::setfill('0') << std::setw(4)
                           << its_service << "." << std::setw(4) << its_instance << "." << std::setw(4) << its_method << "." << std::setw(4)
                           << its_client << "." << std::setw(4) << its_session << "] from: " << _remote_address.to_string() << ":"
@@ -1904,6 +1907,9 @@ bool routing_manager_impl::on_message(service_t _service, instance_t _instance, 
     } else if (its_client == host_->get_client()) {
         deliver_message(_frame, _instance, _reliable, _bound_client, _sec_client, _check_status, _is_from_remote);
     } else {
+        if (_is_from_remote && is_orphaned_remote_response(its_client, _service, _instance, _data)) {
+            return false;
+        }
         message_buffer_ptr_t its_send_frame = _frame.buffer;
         if (!_frame.buffer || _frame.offset != 0 || _frame.length != _frame.buffer->size()) {
             its_send_frame = std::make_shared<message_buffer_t>(_frame.data(), _frame.data() + _frame.length);
@@ -1948,6 +1954,9 @@ bool routing_manager_impl::on_message_checked(service_t _service, instance_t _in
             deliver_message(_frame, _instance, _reliable, _bound_client, _sec_client, _check_status, _is_from_remote);
         }
     } else {
+        if (_is_from_remote && is_orphaned_remote_response(its_client, _service, _instance, _data)) {
+            return false;
+        }
         // Proxy / local forward: scatter hole-free SOME/IP (no materialize concat).
         buffer_sequence_ptr_t its_forward;
         if (_e2e_checked) {
@@ -2600,6 +2609,7 @@ void routing_manager_impl::init_service_info(service_t _service, instance_t _ins
                 VSOMEIP_INFO << "rmi::" << __func__ << ": Port configuration missing for [" << std::hex << _service << "." << _instance
                              << "]. Service is internal.";
             }
+            its_info->set_endpoint_requirements(ILLEGAL_PORT != its_reliable_port, ILLEGAL_PORT != its_unreliable_port);
         }
     } else {
         VSOMEIP_ERROR << "Missing vsomeip configuration.";
@@ -2643,10 +2653,18 @@ bool routing_manager_impl::is_field(service_t _service, instance_t _instance, ev
     return false;
 }
 
-// only called from the SD
+void routing_manager_impl::is_remote_service_known(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor,
+                                                   const boost::asio::ip::address& _reliable_address, uint16_t _reliable_port,
+                                                   bool& _reliable_known, const boost::asio::ip::address& _unreliable_address,
+                                                   uint16_t _unreliable_port, bool& _unreliable_known, bool& _drop_offer) {
+    ep_mgr_impl_->is_remote_service_known(_service, _instance, _major, _minor, _reliable_address, _reliable_port, _reliable_known,
+                                          _unreliable_address, _unreliable_port, _unreliable_known, _drop_offer);
+}
+
 void routing_manager_impl::add_routing_info(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor,
                                             ttl_t _ttl, const boost::asio::ip::address& _reliable_address, uint16_t _reliable_port,
-                                            const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port) {
+                                            const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port,
+                                            bool _is_reliable_known, bool _is_unreliable_known) {
 
     if (is_suspended()) {
         VSOMEIP_INFO << "rmi::" << __func__ << " We are suspended --> do nothing.";
@@ -2679,18 +2697,12 @@ void routing_manager_impl::add_routing_info(service_t _service, instance_t _inst
         its_info->set_ttl(_ttl);
     }
 
-    // Check whether remote services are unchanged
-    bool is_reliable_known(false);
-    bool is_unreliable_known(false);
-    ep_mgr_impl_->is_remote_service_known(_service, _instance, _major, _minor, _reliable_address, _reliable_port, &is_reliable_known,
-                                          _unreliable_address, _unreliable_port, &is_unreliable_known);
-
     bool udp_inserted(false);
     // Add endpoint(s) if necessary
-    if (_reliable_port != ILLEGAL_PORT && !is_reliable_known) {
+    if (_reliable_port != ILLEGAL_PORT && !_is_reliable_known) {
         std::shared_ptr<endpoint_definition> endpoint_def_tcp =
                 endpoint_definition::get(_reliable_address, _reliable_port, true, _service, _instance);
-        if (_unreliable_port != ILLEGAL_PORT && !is_unreliable_known) {
+        if (_unreliable_port != ILLEGAL_PORT && !_is_unreliable_known) {
             std::shared_ptr<endpoint_definition> endpoint_def_udp =
                     endpoint_definition::get(_unreliable_address, _unreliable_port, false, _service, _instance);
             ep_mgr_impl_->add_remote_service_info(_service, _instance, endpoint_def_tcp, endpoint_def_udp);
@@ -2718,7 +2730,7 @@ void routing_manager_impl::add_routing_info(service_t _service, instance_t _inst
                 its_info->add_client(its_client);
             }
         }
-    } else if (_reliable_port != ILLEGAL_PORT && is_reliable_known) {
+    } else if (_reliable_port != ILLEGAL_PORT && _is_reliable_known) {
         std::scoped_lock its_lock_inner{requested_services_mutex_};
         if (has_requester_unlocked(_service, _instance, _major, _minor)) {
             std::shared_ptr<endpoint> ep = its_info->get_endpoint(true);
@@ -2747,7 +2759,7 @@ void routing_manager_impl::add_routing_info(service_t _service, instance_t _inst
         }
     }
 
-    if (_unreliable_port != ILLEGAL_PORT && !is_unreliable_known) {
+    if (_unreliable_port != ILLEGAL_PORT && !_is_unreliable_known) {
         if (!udp_inserted) {
             std::shared_ptr<endpoint_definition> endpoint_def =
                     endpoint_definition::get(_unreliable_address, _unreliable_port, false, _service, _instance);
@@ -2765,10 +2777,10 @@ void routing_manager_impl::add_routing_info(service_t _service, instance_t _inst
                 }
             }
         }
-    } else if (_unreliable_port != ILLEGAL_PORT && is_unreliable_known) {
+    } else if (_unreliable_port != ILLEGAL_PORT && _is_unreliable_known) {
         std::scoped_lock its_lock_inner{requested_services_mutex_};
         if (has_requester_unlocked(_service, _instance, _major, _minor)) {
-            if (_reliable_port == ILLEGAL_PORT && !is_reliable_known && stub_
+            if (_reliable_port == ILLEGAL_PORT && !_is_reliable_known && stub_
                 && !stub_->contained_in_routing_info(VSOMEIP_ROUTING_CLIENT, _service, _instance, its_info->get_major(),
                                                      its_info->get_minor())) {
                 std::shared_ptr<endpoint> ep = its_info->get_endpoint(false);
@@ -3030,8 +3042,14 @@ void routing_manager_impl::init_routing_info() {
 
         if (its_reliable_port != ILLEGAL_PORT || its_unreliable_port != ILLEGAL_PORT) {
 
+            bool is_reliable_known(false);
+            bool is_unreliable_known(false);
+            bool drop_offer(false);
+            ep_mgr_impl_->is_remote_service_known(i.first, i.second, its_major, its_minor, its_address, its_reliable_port,
+                                                  is_reliable_known, its_address, its_unreliable_port, is_unreliable_known, drop_offer);
+
             add_routing_info(i.first, i.second, its_major, its_minor, DEFAULT_TTL, its_address, its_reliable_port, its_address,
-                             its_unreliable_port);
+                             its_unreliable_port, is_reliable_known, is_unreliable_known);
 
             if (its_reliable_port != ILLEGAL_PORT) {
                 ep_mgr_impl_->find_or_create_remote_client(i.first, i.second, true);
@@ -3297,7 +3315,7 @@ return_code_e routing_manager_impl::check_error(const byte_t* _data, length_t /*
                             << std::setfill('0') << std::setw(4) << its_service;
             return return_code_e::E_WRONG_PROTOCOL_VERSION;
         }
-        if (_instance == 0xFFFF) {
+        if (_instance == ANY_INSTANCE) {
             VSOMEIP_WARNING << "rmi::" << __func__ << ": Receiving endpoint is not configured for service 0x" << std::hex
                             << std::setfill('0') << std::setw(4) << its_service;
             return return_code_e::E_UNKNOWN_SERVICE;
@@ -3336,16 +3354,13 @@ void routing_manager_impl::send_error(return_code_e _return_code, const byte_t* 
     session_t its_session = 0;
     major_version_t its_version = 0;
 
-    if (_size >= VSOMEIP_CLIENT_POS_MAX)
+    if (_size >= VSOMEIP_FULL_HEADER_SIZE) {
         its_client = bithelper::read_uint16_be(&_data[VSOMEIP_CLIENT_POS_MIN]);
-    if (_size >= VSOMEIP_SERVICE_POS_MAX)
         its_service = bithelper::read_uint16_be(&_data[VSOMEIP_SERVICE_POS_MIN]);
-    if (_size >= VSOMEIP_METHOD_POS_MAX)
         its_method = bithelper::read_uint16_be(&_data[VSOMEIP_METHOD_POS_MIN]);
-    if (_size >= VSOMEIP_SESSION_POS_MAX)
         its_session = bithelper::read_uint16_be(&_data[VSOMEIP_SESSION_POS_MIN]);
-    if (_size >= VSOMEIP_INTERFACE_VERSION_POS)
         its_version = _data[VSOMEIP_INTERFACE_VERSION_POS];
+    }
 
     auto error_message = runtime::get()->create_message(_reliable);
     error_message->set_client(its_client);
@@ -4206,11 +4221,71 @@ std::vector<protocol::service> routing_manager_impl::get_requested_services(clie
             }
             if (requested) {
                 its_requests.emplace_back(service.first, instance.first, its_major, its_minor);
-                break;
             }
         }
     }
     return its_requests;
+}
+
+std::shared_ptr<endpoint> routing_manager_impl::find_remote_client_for_request(client_t _client, service_t _service, instance_t _instance,
+                                                                             method_t _method, bool _reliable) {
+    if (auto its_target = ep_mgr_impl_->find_or_create_remote_client(_service, _instance, _reliable)) {
+        return its_target;
+    }
+    // The endpoint for the requested reliability does not exist (yet): the service may be announced
+    // through one transport before the other is up, or the remote ECU offers its endpoints
+    // incrementally. The service is available, so fall back to the other endpoint.
+    auto its_fallback = ep_mgr_impl_->find_or_create_remote_client(_service, _instance, !_reliable);
+    if (its_fallback) {
+        VSOMEIP_WARNING << "rmi::" << __func__ << ": Routing info for requested reliability not found, sending via the available endpoint ("
+                        << std::hex << std::setfill('0') << std::setw(4) << _client << "): [" << std::setw(4) << _service << "."
+                        << std::setw(4) << _instance << "." << std::setw(4) << _method << "] reliable=" << std::boolalpha << _reliable;
+    }
+    return its_fallback;
+}
+
+bool routing_manager_impl::is_requester(client_t _client, service_t _service, instance_t _instance) {
+    std::scoped_lock its_lock{requested_services_mutex_};
+
+    // Check both the concrete and the wildcard nodes so wildcard requesters aren't missed.
+    for (const service_t its_service_key : {_service, ANY_SERVICE}) {
+        const auto found_service = requested_services_.find(its_service_key);
+        if (found_service == requested_services_.end()) {
+            continue;
+        }
+        for (const instance_t its_instance_key : {_instance, ANY_INSTANCE}) {
+            const auto found_instance = found_service->second.find(its_instance_key);
+            if (found_instance == found_service->second.end()) {
+                continue;
+            }
+            for (const auto& [major, minors] : found_instance->second) {
+                for (const auto& [minor, clients] : minors) {
+                    if (clients.find(_client) != clients.end()) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+bool routing_manager_impl::is_orphaned_remote_response(client_t _client, service_t _service, instance_t _instance, const byte_t* _data) {
+    const byte_t its_type = _data[VSOMEIP_MESSAGE_TYPE_POS];
+    if (!utility::is_response(its_type) && !utility::is_error(its_type)) {
+        return false;
+    }
+    if (auto its_info = find_service(_service, _instance); its_info && its_info->is_local()) {
+        return false;
+    }
+    if (is_requester(_client, _service, _instance)) {
+        return false;
+    }
+    VSOMEIP_WARNING << "rmi::" << __func__ << ": Dropping response/error for client (" << std::hex << std::setfill('0') << std::setw(4)
+                    << _client << ") that is not/no longer a requester of service: [" << std::setw(4) << _service << "." << std::setw(4)
+                    << _instance << "." << std::setw(4) << bithelper::read_uint16_be(&_data[VSOMEIP_METHOD_POS_MIN]) << "] "
+                    << std::setw(4) << bithelper::read_uint16_be(&_data[VSOMEIP_SESSION_POS_MIN]);
+    return true;
 }
 
 std::set<client_t> routing_manager_impl::get_requesters(service_t _service, instance_t _instance, major_version_t _major,

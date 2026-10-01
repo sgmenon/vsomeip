@@ -10,7 +10,7 @@ namespace vsomeip_v3 {
 serviceinfo::serviceinfo(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor, ttl_t _ttl,
                          bool _is_local) :
     service_(_service), instance_(_instance), major_(_major), minor_(_minor), ttl_(0), reliable_(nullptr), unreliable_(nullptr),
-    is_local_(_is_local), is_in_mainphase_(false), accepting_remote_subscription_(false) {
+    is_local_(_is_local), needs_reliable_(false), needs_unreliable_(false), is_in_mainphase_(false), accepting_remote_subscription_(false) {
 
     std::chrono::seconds ttl = static_cast<std::chrono::seconds>(_ttl);
     ttl_ = std::chrono::duration_cast<std::chrono::milliseconds>(ttl);
@@ -19,6 +19,7 @@ serviceinfo::serviceinfo(service_t _service, instance_t _instance, major_version
 serviceinfo::serviceinfo(const serviceinfo& _other) :
     service_(_other.service_), instance_(_other.instance_), major_(_other.major_), minor_(_other.minor_), ttl_(_other.ttl_),
     reliable_(_other.reliable_), unreliable_(_other.unreliable_), requesters_(_other.requesters_), is_local_(_other.is_local_.load()),
+    needs_reliable_(_other.needs_reliable_.load()), needs_unreliable_(_other.needs_unreliable_.load()),
     is_in_mainphase_(_other.is_in_mainphase_.load()) { }
 
 serviceinfo::~serviceinfo() { }
@@ -92,6 +93,22 @@ uint32_t serviceinfo::get_requesters_size() {
 
 bool serviceinfo::is_local() const {
     return is_local_;
+}
+
+bool serviceinfo::is_ready_to_offer() const {
+    const bool needs_reliable = needs_reliable_;
+    const bool needs_unreliable = needs_unreliable_;
+    // Internal services (no configured port) are never offered
+    if (!needs_reliable && !needs_unreliable) {
+        return false;
+    }
+    std::lock_guard<std::mutex> its_lock(endpoint_mutex_);
+    return (!needs_reliable || reliable_) && (!needs_unreliable || unreliable_);
+}
+
+void serviceinfo::set_endpoint_requirements(bool _needs_reliable, bool _needs_unreliable) {
+    needs_reliable_ = _needs_reliable;
+    needs_unreliable_ = _needs_unreliable;
 }
 
 bool serviceinfo::is_in_mainphase() const {

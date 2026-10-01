@@ -178,6 +178,12 @@ if (DISABLE_SECURITY)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DVSOMEIP_DISABLE_SECURITY")
 endif ()
 
+option(VSOMEIP_DISABLE_ENV_VARS "Disable vulnerable environment variables loading for security hardening" OFF)
+if (VSOMEIP_DISABLE_ENV_VARS)
+    add_definitions(-DVSOMEIP_DISABLE_ENV_VARS)
+    message(STATUS "  vsomeip: vulnerable environment variables loading is DISABLED (VSOMEIP_DISABLE_ENV_VARS)")
+endif ()
+
 # Suppress deprecation warnings for vSomeIP interfaces
 add_definitions(-DVSOMEIP_INTERNAL_SUPPRESS_DEPRECATED)
 
@@ -338,8 +344,8 @@ else ()
     # add syscall wrappers to deal with CLOEXEC
     set_target_properties(${VSOMEIP_NAME} PROPERTIES LINK_FLAGS "-Wl,-wrap,socket -Wl,-wrap,accept -Wl,-wrap,open")
   else ()
-    # add syscall wrappers to deal with CLOEXEC + react on BADFD
-    set_target_properties(${VSOMEIP_NAME} PROPERTIES LINK_FLAGS "-Wl,-wrap,socket -Wl,-wrap,accept -Wl,-wrap,open -Wl,-wrap,close -Wl,-wrap,recvfrom -Wl,-wrap,recvmsg -Wl,-wrap,sendto -Wl,-wrap,sendmsg -Wl,-wrap,epoll_wait")
+    # add syscall wrappers to deal with CLOEXEC + react on certain errors
+    set_target_properties(${VSOMEIP_NAME} PROPERTIES LINK_FLAGS "-Wl,-wrap,socket -Wl,-wrap,accept -Wl,-wrap,open -Wl,-wrap,close -Wl,-wrap,recvfrom -Wl,-wrap,recvmsg -Wl,-wrap,sendto -Wl,-wrap,sendmsg -Wl,-wrap,epoll_wait -Wl,-wrap,epoll_pwait")
   endif ()
 endif ()
 target_include_directories(${VSOMEIP_NAME} INTERFACE

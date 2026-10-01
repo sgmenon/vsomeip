@@ -65,26 +65,49 @@ for ((n = 0; n < stress_times[0]; n++)); do
 			fi
 
 			run-both rm -f /tmp/vsomeip*
-			tcpdump -U -i eth0 -w /home/logs/pcap/"$test".pcap &
+			pcap_file=/home/logs/pcap/"$test".pcap
+			tcpdump -U -i eth0 -w "$pcap_file" &
+			tcpdump_pid=$!
+			test_failed=0
 
 			if ! ctest --preset ci-network-tests --output-junit /home/logs/junit/"$test".xml --tests-regex "^$test$" --test-output-size-passed 1073741824 --test-output-size-failed 1073741824; then
 				update-result-file "$tests_result_file" "$test" 1
 				cp /home/logs/{junit/"$test".xml,failed-junit/}
+				test_failed=1
 			else
 				valgrind_errors=$(valgrind-errors "/home/logs/valgrind/$VALGRIND_TYPE" "$test")
 				if ((valgrind_errors > 0)); then
 					update-result-file "$tests_result_file" "$test" "$valgrind_errors" "$VALGRIND_TYPE"
 					cp /home/logs/{junit/"$test".xml,failed-junit/}
+					test_failed=1
 				else
 					update-result-file "$tests_result_file" "$test"
 				fi
 			fi
 
-			kill %1
+			kill "$tcpdump_pid" 2>/dev/null || :
+			wait "$tcpdump_pid" 2>/dev/null || :
+			# Captures of passing tests are never looked at and add up to
+			# hundreds of GB over a full run.
+			if ((test_failed == 0)); then
+				rm -f "$pcap_file"
+			fi
 			# Do not inherit ASan into kill(1): with LD_PRELOAD=libasan,
 			# `kill -KILL -1` maps a huge VA and can hang, stalling the suite
-			# after the first test.
-			env -u LD_PRELOAD -u ASAN_OPTIONS run-both kill -KILL -1 || :
+			# after the first test. run-both is a shell function, so this
+			# cannot go through env(1), and it cannot run in a subshell
+			# because `kill -KILL -1` on the master would kill that subshell
+			# before the slave is reached.
+			saved_ld_preload=${LD_PRELOAD-}
+			saved_asan_options=${ASAN_OPTIONS-}
+			unset LD_PRELOAD ASAN_OPTIONS
+			run-both kill -KILL -1 || :
+			if [[ -n $saved_ld_preload ]]; then
+				export LD_PRELOAD=$saved_ld_preload
+			fi
+			if [[ -n $saved_asan_options ]]; then
+				export ASAN_OPTIONS=$saved_asan_options
+			fi
 		done
 	done
 done

@@ -48,7 +48,7 @@ void vsomeip_v3::endpoint_impl<Protocol>::register_error_handler(const error_han
 
 template<typename Protocol>
 vsomeip_v3::instance_t vsomeip_v3::endpoint_impl<Protocol>::get_instance(service_t /*_service*/) {
-    return 0xFFFF;
+    return ANY_INSTANCE;
 }
 
 template<typename Protocol>

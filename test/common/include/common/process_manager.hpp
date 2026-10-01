@@ -69,6 +69,16 @@ public:
     }
 
     /**
+     * @brief Waits for the spawned process to exit.
+     *
+     * @return Exit code of the process.
+     */
+    [[nodiscard]] int wait() {
+        join();
+        return exit_code_;
+    }
+
+    /**
      * @brief Forces the restart of the process with same conditions.
      */
     void reset() {

@@ -105,6 +105,9 @@ protected:
     bool check_message_size(uint32_t _size) const;
     typename endpoint_impl<Protocol>::cms_ret_e segment_message(const std::uint8_t* const _data, std::uint32_t _size);
     bool check_queue_limit(const buffer_sequence_ptr_t& _sequence, std::uint32_t _size) const;
+    // Bytes held in the batching stage (train_ and dispatched_trains_) that are
+    // not yet in queue_. The caller must hold mutex_.
+    std::size_t get_pending_train_size() const;
     void queue_train(const std::shared_ptr<train>& _train);
     void update_last_departure();
     bool ensure_connected(const boost::system::error_code& _error);

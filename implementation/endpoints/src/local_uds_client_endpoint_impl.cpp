@@ -47,6 +47,7 @@ void local_uds_client_endpoint_impl::restart(bool _force) {
     {
         std::lock_guard<std::recursive_mutex> its_lock(mutex_);
         sending_blocked_ = false;
+        fail_queue_completions(queue_);
         queue_.clear();
         queue_size_ = 0;
         is_sending_ = false;
@@ -265,6 +266,7 @@ void local_uds_client_endpoint_impl::receive_cbk(boost::system::error_code const
         } else if (_error == boost::asio::error::eof || _error == boost::asio::error::connection_reset) {
             std::lock_guard<std::recursive_mutex> its_lock(mutex_);
             sending_blocked_ = false;
+            fail_queue_completions(queue_);
             queue_.clear();
             queue_size_ = 0;
         } else if (_error == boost::asio::error::bad_descriptor) {

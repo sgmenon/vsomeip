@@ -8,7 +8,8 @@ project("unit_tests_endpoint_tests" LANGUAGES CXX)
 set(TEST_SRCS
     ../main.cpp
     test_timer.cpp
-    test_buffer_sequence.cpp)
+    test_buffer_sequence.cpp
+    test_tp_message.cpp)
 
 # We need to set the source files directly because vsomeip doesn't export the
 # timer for linking.
@@ -18,6 +19,8 @@ set(
     ../../../implementation/endpoints/src/abstract_socket_factory.cpp
     ../../../implementation/endpoints/src/asio_socket_factory.cpp
     ../../../implementation/endpoints/src/netlink_connector.cpp
+    ../../../implementation/endpoints/src/tp.cpp
+    ../../../implementation/endpoints/src/tp_message.cpp
 )
 
 add_executable(

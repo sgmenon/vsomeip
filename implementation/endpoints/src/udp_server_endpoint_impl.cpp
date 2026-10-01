@@ -643,18 +643,17 @@ void udp_server_endpoint_impl::on_message_received_unlocked(const boost::system:
                     return;
                 }
                 auto current_message_size = static_cast<uint32_t>(read_message_size);
-                if (current_message_size > VSOMEIP_SOMEIP_HEADER_SIZE && current_message_size <= remaining_bytes) {
+                if (current_message_size >= VSOMEIP_FULL_HEADER_SIZE && current_message_size <= remaining_bytes) {
                     if (remaining_bytes - current_message_size > remaining_bytes) {
                         VSOMEIP_ERROR << instance_name_ << __func__ << ": buffer underflow!";
                         return;
                     }
 
-                    if (current_message_size > VSOMEIP_RETURN_CODE_POS
-                        && (_buffer[i + VSOMEIP_PROTOCOL_VERSION_POS] != VSOMEIP_PROTOCOL_VERSION
-                            || !utility::is_valid_message_type(tp::tp::tp_flag_unset(_buffer[i + VSOMEIP_MESSAGE_TYPE_POS]))
-                            || !utility::is_valid_return_code(static_cast<return_code_e>(_buffer[i + VSOMEIP_RETURN_CODE_POS]))
-                            || (tp::tp::tp_flag_is_set(_buffer[i + VSOMEIP_MESSAGE_TYPE_POS])
-                                && get_local_port() == configuration_->get_sd_port()))) {
+                    if (_buffer[i + VSOMEIP_PROTOCOL_VERSION_POS] != VSOMEIP_PROTOCOL_VERSION
+                        || !utility::is_valid_message_type(tp::tp::tp_flag_unset(_buffer[i + VSOMEIP_MESSAGE_TYPE_POS]))
+                        || !utility::is_valid_return_code(static_cast<return_code_e>(_buffer[i + VSOMEIP_RETURN_CODE_POS]))
+                        || (tp::tp::tp_flag_is_set(_buffer[i + VSOMEIP_MESSAGE_TYPE_POS])
+                            && get_local_port() == configuration_->get_sd_port())) {
                         if (_buffer[i + VSOMEIP_PROTOCOL_VERSION_POS] != VSOMEIP_PROTOCOL_VERSION) {
                             VSOMEIP_ERROR << instance_name_ << __func__ << ": wrong protocol version: 0x" << std::hex << std::setfill('0')
                                           << std::setw(2) << static_cast<uint32_t>(_buffer[i + VSOMEIP_PROTOCOL_VERSION_POS])
@@ -699,15 +698,16 @@ void udp_server_endpoint_impl::on_message_received_unlocked(const boost::system:
                         const method_t its_method = bithelper::read_uint16_be(&_buffer[i + VSOMEIP_METHOD_POS_MIN]);
                         instance_t its_instance = this->get_instance(its_service);
 
-                        if (its_instance != ANY_INSTANCE) {
-                            if (!tp_segmentation_enabled(its_service, its_instance, its_method)) {
-                                VSOMEIP_WARNING << instance_name_ << __func__ << ": SomeIP/TP message for service: 0x" << std::hex
-                                                << its_service << " method: 0x" << its_method << " which is not configured for TP:"
-                                                << " local: " << get_address_port_local_unlocked() << " remote: " << its_remote_address
-                                                << ":" << std::dec << its_remote_port;
-                                return;
-                            }
+                        // NOTE: ANY_INSTANCE => we do not know/want this service
+                        // `on_message` would also drop it, we do it already to avoid (somewhat expensive) TP logic
+                        if (its_instance == ANY_INSTANCE || !tp_segmentation_enabled(its_service, its_instance, its_method)) {
+                            VSOMEIP_WARNING << instance_name_ << __func__ << ": SomeIP/TP message for service: 0x" << std::hex
+                                            << its_service << " method: 0x" << its_method << " which is not configured for TP:"
+                                            << " local: " << get_address_port_local_unlocked() << " remote: " << its_remote_address
+                                            << ":" << std::dec << its_remote_port;
+                            return;
                         }
+
                         const auto res =
                                 tp_reassembler_->process_tp_message(&_buffer[i], current_message_size, its_remote_address, its_remote_port);
                         if (res.first) {
@@ -723,8 +723,7 @@ void udp_server_endpoint_impl::on_message_received_unlocked(const boost::system:
                                     _is_multicast, VSOMEIP_ROUTING_CLIENT, nullptr, its_remote_address, its_remote_port);
                         }
                     } else {
-                        if (its_service != VSOMEIP_SD_SERVICE
-                            || (current_message_size > VSOMEIP_SOMEIP_HEADER_SIZE && current_message_size >= remaining_bytes)) {
+                        if (its_service != VSOMEIP_SD_SERVICE || (current_message_size >= remaining_bytes)) {
                             its_host->on_message(owned_buffer_slice::slice(_recv_buffer, i, current_message_size), this, _is_multicast,
                                                  VSOMEIP_ROUTING_CLIENT, nullptr, its_remote_address, its_remote_port);
                         } else {

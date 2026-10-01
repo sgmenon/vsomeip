@@ -156,9 +156,14 @@ public:
     void init_routing_info();
     void add_routing_info(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor, ttl_t _ttl,
                           const boost::asio::ip::address& _reliable_address, uint16_t _reliable_port,
-                          const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port);
+                          const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port, bool _is_reliable_known,
+                          bool _is_unreliable_known);
     void del_routing_info(service_t _service, instance_t _instance, bool _has_reliable, bool _has_unreliable, bool _trigger_availability);
     void update_routing_info(std::chrono::milliseconds _elapsed);
+    void is_remote_service_known(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor,
+                                 const boost::asio::ip::address& _reliable_address, uint16_t _reliable_port, bool& _reliable_known,
+                                 const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port, bool& _unreliable_known,
+                                 bool& _drop_offer);
 
     // Handle remote subscriptions / subscription acks
     void on_remote_subscribe(std::shared_ptr<remote_subscription>& _subscription, const remote_subscription_callback_t& _callback);
@@ -304,6 +309,11 @@ private:
     std::set<client_t> get_requesters(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
     std::set<client_t> get_requesters_unlocked(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
     bool has_requester_unlocked(service_t _service, instance_t _instance, major_version_t _major, minor_version_t _minor);
+
+    std::shared_ptr<endpoint> find_remote_client_for_request(client_t _client, service_t _service, instance_t _instance, method_t _method,
+                                                             bool _reliable);
+    bool is_requester(client_t _client, service_t _service, instance_t _instance);
+    bool is_orphaned_remote_response(client_t _client, service_t _service, instance_t _instance, const byte_t* _data);
 
     void call_sd_endpoint_connected(const boost::system::error_code& _error, service_t _service, instance_t _instance,
                                     const std::shared_ptr<endpoint>& _endpoint, std::shared_ptr<boost::asio::steady_timer> _timer);

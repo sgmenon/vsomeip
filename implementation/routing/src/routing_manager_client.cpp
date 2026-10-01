@@ -1095,14 +1095,13 @@ void routing_manager_client::on_message(owned_buffer_slice _frame, endpoint* _re
                         } else { // Notification or Response
 
                             // Verifies security offer rule for messages (notifications and
-                            // responses)
+                            // responses).
                             bool is_offer_access_ok =
-                                    (configuration_->is_security_external()
-                                     && VSOMEIP_SEC_OK
-                                             == configuration_->get_security()->is_client_allowed_to_offer(
-                                                     _sec_client, its_message->get_service(), its_message->get_instance()));
+                                    (VSOMEIP_SEC_OK
+                                     == configuration_->get_security()->is_client_allowed_to_offer(_sec_client, its_message->get_service(),
+                                                                                                   its_message->get_instance()));
 
-                            if (!is_offer_access_ok && configuration_->is_security_external()) {
+                            if (!is_offer_access_ok) {
                                 VSOMEIP_WARNING << "vSomeIP Security: Client 0x" << std::hex << std::setw(4) << std::setfill('0')
                                                 << get_client() << " : routing_manager_client::on_message: received a "
                                                 << (utility::is_notification(its_message->get_message_type()) ? "notification" : "response")
@@ -1116,7 +1115,7 @@ void routing_manager_client::on_message(owned_buffer_slice _frame, endpoint* _re
                                                            && is_response_allowed(_bound_client, its_message->get_service(),
                                                                                   its_message->get_instance(), its_message->get_method()));
 
-                            if (is_intern_resp_allowed || is_offer_access_ok) {
+                            if (is_intern_resp_allowed || configuration_->is_security_external()) {
                                 const bool is_notification = utility::is_notification(its_message->get_message_type());
 
                                 if (is_notification) {
@@ -2297,8 +2296,16 @@ void routing_manager_client::init_receiver() {
     its_policy_manager->store_sec_client_to_client_mapping(&sec_client, get_client());
 #endif
     std::scoped_lock rec_lock(receiver_mutex_);
+    if (configuration_->is_local_routing() && receiver_ && receiver_client_ != get_client()) {
+        // The local UDS server path is derived from the client identifier.
+        VSOMEIP_INFO << "Recreating local server endpoint, client changed from " << std::hex << std::setfill('0') << std::setw(4)
+                     << receiver_client_ << " to " << std::setw(4) << get_client();
+        receiver_->stop(false);
+        receiver_ = nullptr;
+    }
     if (!receiver_) {
         receiver_ = ep_mgr_->create_local_server(shared_from_this());
+        receiver_client_ = get_client();
     } else {
         std::uint16_t its_port = receiver_->get_local_port();
         if (its_port != ILLEGAL_PORT)
