@@ -103,6 +103,7 @@ private:
     void deregister_application();
 
     void reconnect(const std::map<client_t, std::string>& _clients);
+    void on_deregistered(const char* _caller);
 
     void send_pong() const;
 

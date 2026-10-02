@@ -1747,18 +1747,7 @@ void routing_manager_client::on_routing_info(const byte_t* _data, uint32_t _size
                 its_policy_manager->remove_client_to_sec_client_mapping(its_client);
                 VSOMEIP_INFO << "Application/Client " << std::hex << std::setfill('0') << std::setw(4) << get_client() << " ("
                              << host_->get_name() << ") is deregistered.";
-
-                // inform host about its own registration state changes
-                host_->on_state(static_cast<state_type_e>(inner_state_type_e::ST_DEREGISTERED));
-
-                {
-                    VSOMEIP_DEBUG << "rmc::" << __func__ << ": state_ change " << to_string(state_.load()) << " -> "
-                                  << to_string(inner_state_type_e::ST_DEREGISTERED);
-                    state_ = inner_state_type_e::ST_DEREGISTERED;
-                    // Notify stop() call about clean deregistration
-                    std::scoped_lock its_lock(state_condition_mutex_);
-                    state_condition_.notify_one();
-                }
+                on_deregistered(__func__);
             }
             break;
         }
@@ -1848,22 +1837,24 @@ void routing_manager_client::on_offered_services_info(protocol::offered_services
     host_->on_offered_services_info(its_offered_services_info);
 }
 
+void routing_manager_client::on_deregistered(const char* _caller) {
+    // inform host about its own registration state changes
+    host_->on_state(static_cast<state_type_e>(inner_state_type_e::ST_DEREGISTERED));
+
+    VSOMEIP_DEBUG << "rmc::" << _caller << ": state_ change " << to_string(state_.load()) << " -> "
+                  << to_string(inner_state_type_e::ST_DEREGISTERED);
+    state_ = inner_state_type_e::ST_DEREGISTERED;
+    // Notify stop() call about clean deregistration
+    std::scoped_lock its_lock(state_condition_mutex_);
+    state_condition_.notify_one();
+}
+
 void routing_manager_client::reconnect(const std::map<client_t, std::string>& _clients) {
     auto its_policy_manager = configuration_->get_policy_manager();
     if (!its_policy_manager)
         return;
 
-    // inform host about its own registration state changes
-    host_->on_state(static_cast<state_type_e>(inner_state_type_e::ST_DEREGISTERED));
-
-    {
-        VSOMEIP_DEBUG << "rmc::" << __func__ << ": state_ change " << to_string(state_.load()) << " -> "
-                      << to_string(inner_state_type_e::ST_DEREGISTERED);
-        state_ = inner_state_type_e::ST_DEREGISTERED;
-        // Notify stop() call about clean deregistration
-        std::scoped_lock its_lock(state_condition_mutex_);
-        state_condition_.notify_one();
-    }
+    on_deregistered(__func__);
 
     // Clear boardnet subscriptions
     clear_remote_subscriptions();
@@ -2584,6 +2575,10 @@ void routing_manager_client::handle_client_error(client_t _client) {
             }
             cancel_keepalive();
             reconnect(its_known_clients);
+        } else if (state_ == inner_state_type_e::ST_REGISTERED) {
+            // Stopping: the host dropped us before its deregistration ack arrived. Release stop()
+            // now rather than after the shutdown timeout; it removes the local endpoints itself.
+            on_deregistered(__func__);
         }
     }
 }
