@@ -141,6 +141,10 @@ void routing_manager_client::stop() {
         }
     }
 
+    // Cleared before deregistering: the host closes the connection once it has acknowledged, and
+    // handle_client_error must not take that for a lost host and drop the queued local sends.
+    is_started_ = false;
+
     if (state_ == inner_state_type_e::ST_REGISTERED) {
         deregister_application();
         // Waiting de-register acknowledge to synchronize shutdown
@@ -149,7 +153,6 @@ void routing_manager_client::stop() {
             VSOMEIP_ERROR << std::hex << std::setfill('0') << std::setw(4) << get_client() << " couldn't deregister application - timeout";
         }
     }
-    is_started_ = false;
 
     {
         std::scoped_lock its_lock(requests_to_debounce_mutex_);
