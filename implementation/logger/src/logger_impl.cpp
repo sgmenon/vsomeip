@@ -152,5 +152,12 @@ logger_impl* logger_impl::get() {
     return is_destroyed.load(std::memory_order_acquire) ? nullptr : instance.get();
 }
 
+namespace {
+// Construct the logger while the library is loaded, before the program's own
+// static objects, so it is destroyed after them. An application owned by a
+// static object still logs while that object's destructor stops it.
+[[maybe_unused]] const logger_impl* const logger_at_load = logger_impl::get();
+} // namespace
+
 } // namespace logger
 } // namespace vsomeip_v3
