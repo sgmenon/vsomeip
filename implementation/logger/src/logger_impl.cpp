@@ -3,6 +3,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#include <cstdlib>
+
 #include <vsomeip/runtime.hpp>
 
 #ifdef VSOMEIP_USE_SPDLOG
@@ -16,7 +18,12 @@
 namespace vsomeip_v3 {
 namespace logger {
 
-logger_impl::logger_impl() : config_{{false, false, false, level_e::LL_NONE}} { }
+logger_impl::logger_impl() :
+    config_{{false, false, false, level_e::LL_NONE}}, app_name_{[] {
+        // NOLINTNEXTLINE(concurrency-mt-unsafe): runs once, while the library is loaded
+        const char* name = std::getenv(VSOMEIP_ENV_APPLICATION_NAME);
+        return name ? std::string{" "} + name : std::string{};
+    }()} { }
 
 void logger_impl::init(const std::shared_ptr<configuration>& _configuration) {
     logger_impl::get()->set_configuration(_configuration);

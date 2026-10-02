@@ -258,13 +258,10 @@ std::string_view message::timestamp() const {
 }
 
 std::string_view message::app_name() const {
-    static std::string its_name = [] {
-        // Only read the env var once, on first use. This is also threadsafe.
-        // NOLINTNEXTLINE(concurrency-mt-unsafe): False positve since C++11
-        const char* name = std::getenv(VSOMEIP_ENV_APPLICATION_NAME);
-        return name ? std::string{" "} + name : "";
-    }();
-    return its_name;
+    if (const auto* its_logger = logger_impl::get()) {
+        return its_logger->app_name();
+    }
+    return {};
 }
 
 std::string_view message::level_as_view() const {
