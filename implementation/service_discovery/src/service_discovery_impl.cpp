@@ -2349,19 +2349,17 @@ void service_discovery_impl::stop_ttl_timer() {
 
 void service_discovery_impl::check_ttl(const boost::system::error_code& _error) {
 
-    static int its_counter(0); // count the times we were not able to call
-                               // update_routing_info
     if (!_error) {
         {
             std::unique_lock<std::mutex> its_lock(check_ttl_mutex_, std::try_to_lock);
             if (its_lock.owns_lock()) {
-                its_counter = 0;
+                check_ttl_skipped_ = 0;
                 host_->update_routing_info(ttl_timer_runtime_);
             } else {
-                its_counter++;
+                check_ttl_skipped_++;
             }
         }
-        start_ttl_timer(its_counter * VSOMEIP_MINIMUM_CHECK_TTL_TIMEOUT);
+        start_ttl_timer(check_ttl_skipped_ * VSOMEIP_MINIMUM_CHECK_TTL_TIMEOUT);
     }
 }
 
