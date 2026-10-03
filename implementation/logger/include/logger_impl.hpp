@@ -10,6 +10,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <string_view>
 
 #ifdef USE_DLT
@@ -44,6 +45,9 @@ public:
 
     void log_to_file(std::string_view _msg);
 
+    // " <name>" from the application name environment variable, or empty.
+    std::string_view app_name() const { return app_name_; }
+
 #ifdef USE_DLT
     static DltContext& dlt_context();
     void log_to_dlt(level_e _level, std::string_view _msg);
@@ -51,6 +55,8 @@ public:
 
 private:
     std::atomic<config> config_;
+    // Owned by the logger so it lives exactly as long as the logger does.
+    const std::string app_name_;
 
     std::mutex log_file_mutex_;
     std::ofstream log_file_;

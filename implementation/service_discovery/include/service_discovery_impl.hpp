@@ -412,6 +412,9 @@ private:
 
     std::mutex offer_mutex_;
     std::mutex check_ttl_mutex_;
+    // Number of consecutive check_ttl() runs that could not call update_routing_info().
+    // Only touched by the ttl timer handler.
+    int check_ttl_skipped_{0};
 
     boost::asio::steady_timer suspend_stop_offer_watchdog_;
     std::mutex suspend_stop_offer_mutex_;

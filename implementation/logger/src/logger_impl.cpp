@@ -3,6 +3,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#include <cstdlib>
+
 #include <vsomeip/runtime.hpp>
 
 #ifdef VSOMEIP_USE_SPDLOG
@@ -16,7 +18,12 @@
 namespace vsomeip_v3 {
 namespace logger {
 
-logger_impl::logger_impl() : config_{{false, false, false, level_e::LL_NONE}} { }
+logger_impl::logger_impl() :
+    config_{{false, false, false, level_e::LL_NONE}}, app_name_{[] {
+        // NOLINTNEXTLINE(concurrency-mt-unsafe): runs once, while the library is loaded
+        const char* name = std::getenv(VSOMEIP_ENV_APPLICATION_NAME);
+        return name ? std::string{" "} + name : std::string{};
+    }()} { }
 
 void logger_impl::init(const std::shared_ptr<configuration>& _configuration) {
     logger_impl::get()->set_configuration(_configuration);
@@ -151,6 +158,13 @@ logger_impl* logger_impl::get() {
     static std::unique_ptr<logger_impl, decltype(deleter)> instance{new logger_impl, deleter};
     return is_destroyed.load(std::memory_order_acquire) ? nullptr : instance.get();
 }
+
+namespace {
+// Construct the logger while the library is loaded, before the program's own
+// static objects, so it is destroyed after them. An application owned by a
+// static object still logs while that object's destructor stops it.
+[[maybe_unused]] const logger_impl* const logger_at_load = logger_impl::get();
+} // namespace
 
 } // namespace logger
 } // namespace vsomeip_v3

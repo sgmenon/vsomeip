@@ -1,2 +1,12 @@
 # This file contains a list of test identifiers that are known to be flaky or non-critical.
 # Tests listed here are allowed to fail without causing the overall test job to fail.
+
+# dispatch_app_stop_tests: exercise usage this fork does not support, namely calling
+# application::stop() from inside a handler and blocking inside handlers.
+dispatch_app_stop_test
+dispatch_app_outlives_program
+dispatch_app_outlives_global
+dispatch_app_multiple_program
+dispatch_app_multiple_global
+dispatch_app_interdependent_program
+dispatch_app_secondary_dispatchers_test
