@@ -49,6 +49,9 @@ public:
                                   const boost::asio::ip::address& _unreliable_address, uint16_t _unreliable_port, bool _is_reliable_known,
                                   bool _is_unreliable_known) = 0;
 
+    // Drops every route for one service instance. StopOffer calls this once,
+    // with no eventgroup. A host that caches subscriber endpoints per
+    // eventgroup has to clear all of that instance's entries here.
     virtual void del_routing_info(service_t _service, instance_t _instance, bool _has_reliable, bool _has_unreliable,
                                   bool _trigger_availability) = 0;
 
@@ -68,6 +71,12 @@ public:
                                                  const boost::asio::ip::address& _address, uint16_t _port) = 0;
 
     virtual std::shared_ptr<endpoint> find_or_create_remote_client(service_t _service, instance_t _instance, bool _reliable) = 0;
+
+    virtual std::shared_ptr<endpoint> find_or_create_remote_client(service_t _service, instance_t _instance, eventgroup_t _eventgroup,
+                                                                   bool _reliable) {
+        (void)_eventgroup;
+        return find_or_create_remote_client(_service, _instance, _reliable);
+    }
 
     virtual void expire_subscriptions(const boost::asio::ip::address& _address) = 0;
     virtual void expire_subscriptions(const boost::asio::ip::address& _address, std::uint16_t _port, bool _reliable) = 0;

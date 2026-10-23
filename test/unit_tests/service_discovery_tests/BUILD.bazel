@@ -1,0 +1,22 @@
+# Copyright (C) 2026 GM GLOBAL TECHNOLOGY OPERATIONS LLC ALL RIGHTS RESERVED.
+#
+# Drives service_discovery_impl with a mock host. libvsomeip3-sd.so.3 stays
+# a DT_NEEDED entry so plugin_manager's dlopen of that soname in init()
+# reuses the already-loaded plugin.
+
+load("@rules_cc//cc:defs.bzl", "cc_test")
+
+cc_test(
+    name = "service_discovery_tests",
+    srcs = glob(["*.cpp"]),
+    linkopts = [
+        "-Wl,--no-as-needed",
+        "-Wl,-rpath,$$ORIGIN",
+    ],
+    deps = [
+        "//:vsomeip-cfg",
+        "//:vsomeip-sd",
+        "//test/unit_tests:test_main",
+        "@googletest//:gtest",
+    ],
+)

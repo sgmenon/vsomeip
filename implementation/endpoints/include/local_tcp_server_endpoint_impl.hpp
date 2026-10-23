@@ -85,6 +85,8 @@ private:
         tcp_socket& get_socket();
         std::unique_lock<std::mutex> get_socket_lock();
 
+        void set_remote(const endpoint_type& _remote);
+
         void start();
         void stop();
 
@@ -115,6 +117,8 @@ private:
 
         std::mutex socket_mutex_;
         std::unique_ptr<tcp_socket> socket_;
+        // getpeername fails once the peer has closed, but messages it sent before closing may still be unparsed in recv_buffer_
+        endpoint_type remote_;
         partial_message_watchdog partial_message_watchdog_;
         std::weak_ptr<local_tcp_server_endpoint_impl> server_;
 

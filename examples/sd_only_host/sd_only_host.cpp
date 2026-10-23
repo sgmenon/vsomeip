@@ -40,8 +40,9 @@
 // Real vs phantom remote-client endpoints
 // -----------------------------------------------------------------------------
 //
-// `service_discovery_impl::find_or_create_remote_client` asks the host for a
-// client-side endpoint to a peer's advertised service. The SD engine reads
+// `service_discovery_host::find_or_create_remote_client` asks the host for a
+// client-side endpoint to a peer's advertised service, including the
+// eventgroup being subscribed. The SD engine reads
 // `get_local_port()` off it (for the subscriber endpoint option in an
 // outbound SubscribeEventgroup PDU) and `get_remote_address()` for the PDU
 // destination. It does NOT push any bytes through this endpoint — the SD
@@ -88,6 +89,7 @@
 
 // vsomeip's public headers must come before the cfg::* structs.
 #include <vsomeip/constants.hpp>
+#include <vsomeip/enumeration_types.hpp>
 #include <vsomeip/internal/serializable.hpp>
 #include <vsomeip/vsomeip_sec.h>
 
@@ -111,6 +113,31 @@
 namespace v3 = vsomeip_v3;
 
 namespace {
+
+// Subscriber ports advertised for two eventgroups of one consumed service.
+// The SD engine asks once per eventgroup, so these must not collapse to a
+// single client port the way a per-service lookup would.
+struct eventgroup_subscriber_port {
+    v3::service_t service;
+    v3::instance_t instance;
+    v3::eventgroup_t eventgroup;
+    bool reliable;
+    std::uint16_t port;
+};
+
+constexpr eventgroup_subscriber_port k_eventgroup_ports[] = {
+        {0xABCD, 0x0001, 0x8001, false, 50046},
+        {0xABCD, 0x0001, 0x8003, false, 50047},
+};
+
+std::uint16_t port_for_eventgroup(v3::service_t service, v3::instance_t instance, v3::eventgroup_t eventgroup, bool reliable) {
+    for (const auto& entry : k_eventgroup_ports) {
+        if (entry.service == service && entry.instance == instance && entry.eventgroup == eventgroup && entry.reliable == reliable) {
+            return entry.port;
+        }
+    }
+    return 0;
+}
 
 // -----------------------------------------------------------------------------
 // Description of one service this host advertises.
@@ -383,6 +410,15 @@ public:
                           bool /*trigger_availability*/) override {
         std::lock_guard lock{learned_mutex_};
         learned_offers_.erase({service, instance});
+        // StopOffer names the service instance only. Drop every eventgroup's
+        // cached subscriber endpoint for it; the next Subscribe looks them up again.
+        for (auto it = remote_clients_.begin(); it != remote_clients_.end();) {
+            if (std::get<0>(it->first) == service && std::get<1>(it->first) == instance) {
+                it = remote_clients_.erase(it);
+            } else {
+                ++it;
+            }
+        }
         std::cout << "[sd_only_host] OFFER expired [" << format_id(service) << '.' << format_id(instance) << "]\n";
     }
 
@@ -442,7 +478,13 @@ public:
     // get_local_port() and get_remote_address() still return the values we
     // seeded the constructor with, which is everything the SD engine reads.
     std::shared_ptr<v3::endpoint> find_or_create_remote_client(v3::service_t service, v3::instance_t instance, bool reliable) override {
-        const auto cache_key = std::make_tuple(service, instance, reliable);
+        // No eventgroup: one endpoint per service instance, from clients[].
+        return find_or_create_remote_client(service, instance, v3::ANY_EVENTGROUP, reliable);
+    }
+
+    std::shared_ptr<v3::endpoint> find_or_create_remote_client(v3::service_t service, v3::instance_t instance, v3::eventgroup_t eventgroup,
+                                                              bool reliable) override {
+        const auto cache_key = std::make_tuple(service, instance, eventgroup, reliable);
         if (auto it = remote_clients_.find(cache_key); it != remote_clients_.end()) return it->second;
 
         boost::asio::ip::address remote_address;
@@ -457,22 +499,25 @@ public:
         if (remote_address.is_unspecified() || remote_port == 0) return nullptr;
 
         // The local port on this endpoint is what the SubscribeEventgroup
-        // PDU advertises to the peer as "send my notifications here". In a
-        // full vsomeip app it comes from the clients[] configured
-        // subscriber-port range; we use the same accessor.
-        std::uint16_t local_port = 0;
-        std::map<bool, std::set<std::uint16_t>> used_client_ports;
-        if (!configuration_->get_client_port(service, instance, remote_port, reliable, used_client_ports, local_port) || local_port == 0) {
-            std::cout << "[sd_only_host] no configured client port for [" << format_id(service) << '.' << format_id(instance)
-                      << "] reliable=" << reliable << " — cannot construct remote-client endpoint\n";
-            return nullptr;
+        // PDU advertises to the peer as "send my notifications here".
+        // Eventgroups listed in k_eventgroup_ports each get their own port;
+        // anything else falls back to the clients[] range, shared by service.
+        std::uint16_t local_port = port_for_eventgroup(service, instance, eventgroup, reliable);
+        if (local_port == 0) {
+            std::map<bool, std::set<std::uint16_t>> used_client_ports;
+            if (!configuration_->get_client_port(service, instance, remote_port, reliable, used_client_ports, local_port)
+                || local_port == 0) {
+                std::cout << "[sd_only_host] no configured client port for [" << format_id(service) << '.' << format_id(instance) << '.'
+                          << format_id(eventgroup) << "] reliable=" << reliable << " — cannot construct remote-client endpoint\n";
+                return nullptr;
+            }
         }
 
         auto ep = make_unstarted_client_endpoint(reliable, local_port, remote_address, remote_port);
         remote_clients_[cache_key] = ep;
         std::cout << "[sd_only_host] built unstarted " << (reliable ? "tcp" : "udp") << " client endpoint for [" << format_id(service)
-                  << '.' << format_id(instance) << "] local=" << local_port << " peer=" << remote_address.to_string() << ':' << remote_port
-                  << '\n';
+                  << '.' << format_id(instance) << '.' << format_id(eventgroup) << "] local=" << local_port
+                  << " peer=" << remote_address.to_string() << ':' << remote_port << '\n';
         return ep;
     }
 
@@ -540,7 +585,7 @@ private:
     mutable std::mutex learned_mutex_;
     std::map<std::pair<v3::service_t, v3::instance_t>, known_offer> learned_offers_;
 
-    std::map<std::tuple<v3::service_t, v3::instance_t, bool>, std::shared_ptr<v3::endpoint>> remote_clients_;
+    std::map<std::tuple<v3::service_t, v3::instance_t, v3::eventgroup_t, bool>, std::shared_ptr<v3::endpoint>> remote_clients_;
 };
 
 // -----------------------------------------------------------------------------
@@ -596,11 +641,25 @@ void drive_sd_from_config(v3::cfg::configuration_impl& cfg, v3::sd::service_disc
         std::cout << "[main] requested [0x" << std::hex << std::setw(4) << std::setfill('0') << cli->service_ << '.' << std::setw(4)
                   << cli->instance_ << std::dec << "]\n";
         auto svc_it = services_by_id.find({cli->service_, cli->instance_});
-        if (svc_it == services_by_id.end()) continue;
-        for (const auto& [eg_id, _] : svc_it->second->eventgroups_) {
-            auto eg_info = std::make_shared<v3::eventgroupinfo>(cli->service_, cli->instance_, eg_id, k_major, sd_ttl,
+        if (svc_it != services_by_id.end()) {
+            for (const auto& [eg_id, _] : svc_it->second->eventgroups_) {
+                auto eg_info = std::make_shared<v3::eventgroupinfo>(cli->service_, cli->instance_, eg_id, k_major, sd_ttl,
+                                                                    /*_max_remote_subscribers=*/0);
+                sd.subscribe(cli->service_, cli->instance_, eg_id, k_major, sd_ttl, /*VSOMEIP_ROUTING_CLIENT=*/0, eg_info);
+            }
+        }
+        // Two eventgroups of this one service, each with its own subscriber port
+        // (see k_eventgroup_ports). The SD engine passes the eventgroup into
+        // find_or_create_remote_client, so the Subscribe entries differ.
+        for (const auto& entry : k_eventgroup_ports) {
+            if (entry.service != cli->service_ || entry.instance != cli->instance_) continue;
+            auto eg_info = std::make_shared<v3::eventgroupinfo>(entry.service, entry.instance, entry.eventgroup, k_major, sd_ttl,
                                                                 /*_max_remote_subscribers=*/0);
-            sd.subscribe(cli->service_, cli->instance_, eg_id, k_major, sd_ttl, /*VSOMEIP_ROUTING_CLIENT=*/0, eg_info);
+            eg_info->set_reliability(entry.reliable ? v3::reliability_type_e::RT_RELIABLE : v3::reliability_type_e::RT_UNRELIABLE);
+            sd.subscribe(entry.service, entry.instance, entry.eventgroup, k_major, sd_ttl, /*VSOMEIP_ROUTING_CLIENT=*/0, eg_info);
+            std::cout << "[main] subscribed [" << std::hex << std::setw(4) << std::setfill('0') << entry.service << '.' << std::setw(4)
+                      << entry.instance << '.' << std::setw(4) << entry.eventgroup << std::dec << "] subscriber port " << entry.port
+                      << '\n';
         }
     }
 }
