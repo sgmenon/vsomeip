@@ -259,6 +259,8 @@ void local_tcp_server_endpoint_impl::accept_cbk(connection::ptr _connection, boo
             if (its_error) {
                 VSOMEIP_WARNING << "ltsei::" << __func__ << ": could not read endpoint, "
                                 << "error: " << its_error.message();
+            } else {
+                _connection->set_remote(remote);
             }
 
             remote_address = remote.address().to_string();
@@ -393,6 +395,10 @@ tcp_socket& local_tcp_server_endpoint_impl::connection::get_socket() {
 
 std::unique_lock<std::mutex> local_tcp_server_endpoint_impl::connection::get_socket_lock() {
     return std::unique_lock<std::mutex>(socket_mutex_);
+}
+
+void local_tcp_server_endpoint_impl::connection::set_remote(const endpoint_type& _remote) {
+    remote_ = _remote;
 }
 
 void local_tcp_server_endpoint_impl::connection::start() {
@@ -696,10 +702,12 @@ void local_tcp_server_endpoint_impl::connection::receive_cbk(boost::system::erro
                     assigned_client_ = true;
                 } else if (!its_server->is_routing_endpoint_ || assigned_client_) {
                     boost::system::error_code ec;
-                    auto its_endpoint = socket_->remote_endpoint(ec);
+                    if (remote_.port() == 0) {
+                        remote_ = socket_->remote_endpoint(ec);
+                    }
                     if (!ec) {
-                        auto its_address = its_endpoint.address();
-                        auto its_port = its_endpoint.port();
+                        auto its_address = remote_.address();
+                        auto its_port = remote_.port();
 
                         if (its_address.is_v4()) {
                             sec_client_.host = htonl(uint32_t(its_address.to_v4().to_uint()));

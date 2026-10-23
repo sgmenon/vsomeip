@@ -274,7 +274,7 @@ void service_discovery_impl::subscribe(service_t _service, instance_t _instance,
     }
 
     std::shared_ptr<endpoint> its_reliable, its_unreliable;
-    get_subscription_endpoints(_service, _instance, its_reliable, its_unreliable);
+    get_subscription_endpoints(_service, _instance, _eventgroup, its_reliable, its_unreliable);
 
     // New subscription
     std::shared_ptr<subscription> its_subscription = create_subscription(_major, _ttl, its_reliable, its_unreliable, _info);
@@ -346,10 +346,10 @@ void service_discovery_impl::send_subscription(const std::shared_ptr<subscriptio
     }
 }
 
-void service_discovery_impl::get_subscription_endpoints(service_t _service, instance_t _instance, std::shared_ptr<endpoint>& _reliable,
-                                                        std::shared_ptr<endpoint>& _unreliable) const {
-    _unreliable = host_->find_or_create_remote_client(_service, _instance, false);
-    _reliable = host_->find_or_create_remote_client(_service, _instance, true);
+void service_discovery_impl::get_subscription_endpoints(service_t _service, instance_t _instance, eventgroup_t _eventgroup,
+                                                        std::shared_ptr<endpoint>& _reliable, std::shared_ptr<endpoint>& _unreliable) const {
+    _unreliable = host_->find_or_create_remote_client(_service, _instance, _eventgroup, false);
+    _reliable = host_->find_or_create_remote_client(_service, _instance, _eventgroup, true);
 }
 
 void service_discovery_impl::get_subscription_address(const std::shared_ptr<endpoint>& _reliable,
@@ -1441,7 +1441,7 @@ void service_discovery_impl::process_offerservice_serviceentry(service_t _servic
                     for (const auto& its_eventgroup : found_instance->second) {
                         auto its_subscription = its_eventgroup.second;
                         std::shared_ptr<endpoint> its_reliable, its_unreliable;
-                        get_subscription_endpoints(_service, _instance, its_reliable, its_unreliable);
+                        get_subscription_endpoints(_service, _instance, its_eventgroup.first, its_reliable, its_unreliable);
                         its_subscription->set_endpoint(its_reliable, true);
                         its_subscription->set_endpoint(its_unreliable, false);
                         for (const auto& its_client : its_subscription->get_clients()) {
@@ -1587,7 +1587,7 @@ void service_discovery_impl::on_endpoint_connected(service_t _service, instance_
 
                                     std::shared_ptr<endpoint> its_unreliable;
                                     std::shared_ptr<endpoint> its_reliable;
-                                    get_subscription_endpoints(_service, _instance, its_reliable, its_unreliable);
+                                    get_subscription_endpoints(_service, _instance, its_eventgroup.first, its_reliable, its_unreliable);
                                     get_subscription_address(its_reliable, its_unreliable, its_address);
 
                                     its_subscription->set_endpoint(its_reliable, true);

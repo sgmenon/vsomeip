@@ -71,10 +71,13 @@ private:
     std::shared_ptr<endpoint> reliable_;
     std::shared_ptr<endpoint> unreliable_;
 
-    bool is_selective_;
+    bool is_selective_{false};
 
-    bool tcp_connection_established_;
-    bool udp_connection_established_;
+    // False until create_subscription copies the endpoint's established state.
+    // A subscription with only one reliability never sets the other flag, and
+    // on_endpoint_connected reads both.
+    bool tcp_connection_established_{false};
+    bool udp_connection_established_{false};
 
     mutable std::mutex clients_mutex_;
     std::map<client_t, subscription_state_e> clients_; // client-> is acknowledged?

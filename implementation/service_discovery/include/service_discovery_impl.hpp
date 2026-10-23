@@ -184,8 +184,8 @@ private:
     bool check_static_header_fields(const std::shared_ptr<const message>& _message) const;
     bool check_layer_four_protocol(const std::shared_ptr<const ip_option_impl>& _ip_option) const;
 
-    void get_subscription_endpoints(service_t _service, instance_t _instance, std::shared_ptr<endpoint>& _reliable,
-                                    std::shared_ptr<endpoint>& _unreliable) const;
+    void get_subscription_endpoints(service_t _service, instance_t _instance, eventgroup_t _eventgroup,
+                                    std::shared_ptr<endpoint>& _reliable, std::shared_ptr<endpoint>& _unreliable) const;
     void get_subscription_address(const std::shared_ptr<endpoint>& _reliable, const std::shared_ptr<endpoint>& _unreliable,
                                   boost::asio::ip::address& _address) const;
 
