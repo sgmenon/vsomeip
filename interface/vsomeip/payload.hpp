@@ -78,10 +78,10 @@ public:
     VSOMEIP_EXPORT virtual length_t get_length() const = 0;
 
     /**
-     * \brief Set the maximum length of the payload content.
+     * \brief Empties the payload and reserves room for _length bytes.
      *
-     * This function must be called before directly copying data using the
-     * pointer to the internal buffer.
+     * The length is 0 afterwards, so get_data() has no bytes to write to.
+     * Fill the payload with set_data(); moving a vector in does not copy it.
      */
     VSOMEIP_EXPORT virtual void set_capacity(length_t _length) = 0;
 

@@ -94,6 +94,11 @@ void app::send_event(event_ids const& _ei, std::vector<unsigned char> const& _pa
     app_->notify(_ei.si_.service_, _ei.si_.instance_, _ei.event_id_, payload, false);
 }
 
+void app::send_event(event_ids const& _ei, std::shared_ptr<vsomeip::payload> const& _payload, std::function<void(bool)> _completion) {
+    TEST_LOG << "[app] \"" << app_->get_name() << "\" is sending with completion: " << _ei;
+    app_->notify(_ei.si_.service_, _ei.si_.instance_, _ei.event_id_, _payload, false, std::move(_completion));
+}
+
 void app::send_request(request const& _req) {
     TEST_LOG << "[app] \"" << app_->get_name() << "\" is requesting: " << _req;
     auto message = vsomeip::runtime::get()->create_request(true);

@@ -14,6 +14,7 @@
 #include <memory>
 #include <numeric>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include <boost/asio/buffer.hpp>
@@ -37,21 +38,30 @@ using message_buffer_ptr_t = std::shared_ptr<message_buffer_t>;
 
 /**
  * Latch for optional send/notify completion handlers.
- * Use begin()/add_pending()/end() around synchronous queueing, then each
- * async write completion calls complete().
+ * Hold it with begin()/end() while queueing a call's writes, queue each write through queue_write(),
+ * and have each async write completion call complete().
  */
 struct send_completion_state {
     explicit send_completion_state(std::function<void(bool)> _handler) : handler_(std::move(_handler)) { }
 
     void begin() { remaining_.fetch_add(1, std::memory_order_acq_rel); }
 
-    void add_pending(int _n = 1) {
-        if (_n > 0) {
-            remaining_.fetch_add(_n, std::memory_order_acq_rel);
-        }
-    }
-
     void end() { complete(true); }
+
+    /**
+     * Counts one write and queues it with _send. The count comes first: the write may complete on
+     * an io thread before _send returns, and must not release the latch while other writes of the
+     * same call are still queued. A write that is not queued is uncounted.
+     */
+    template<typename Send>
+    bool queue_write(Send&& _send) {
+        remaining_.fetch_add(1, std::memory_order_acq_rel);
+        const bool is_queued = _send();
+        if (!is_queued) {
+            complete(true);
+        }
+        return is_queued;
+    }
 
     void complete(bool _success) {
         if (!_success) {

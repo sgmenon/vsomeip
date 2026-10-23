@@ -1281,11 +1281,7 @@ bool routing_manager_base::send_local(std::shared_ptr<endpoint>& _target, client
     if (_completion) {
         its_ipc->attach_completion(_completion);
     }
-    const bool queued = _target->send(its_ipc);
-    if (queued && _completion) {
-        _completion->add_pending(1);
-    }
-    return queued;
+    return _completion ? _completion->queue_write([&] { return _target->send(its_ipc); }) : _target->send(its_ipc);
 }
 
 bool routing_manager_base::insert_subscription(service_t _service, instance_t _instance, eventgroup_t _eventgroup, event_t _event,

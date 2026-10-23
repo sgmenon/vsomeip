@@ -924,11 +924,12 @@ bool routing_manager_client::send_with_someip_sequence(client_t _client, const b
 }
 
 bool routing_manager_client::send_to(const client_t _client, const std::shared_ptr<endpoint_definition>& _target,
-                                     std::shared_ptr<message> _message) {
+                                     std::shared_ptr<message> _message, send_completion_state_ptr_t _completion) {
 
     (void)_client;
     (void)_target;
     (void)_message;
+    (void)_completion;
 
     return false;
 }

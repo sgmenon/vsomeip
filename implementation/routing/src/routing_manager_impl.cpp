@@ -1105,11 +1105,9 @@ bool routing_manager_impl::send_with_sequence(client_t _client, buffer_sequence_
                     if (_completion) {
                         _sequence->attach_completion(_completion);
                     }
-                    is_sent = its_target->send(_sequence);
+                    is_sent = _completion ? _completion->queue_write([&] { return its_target->send(_sequence); })
+                                          : its_target->send(_sequence);
                     if (is_sent) {
-                        if (_completion) {
-                            _completion->add_pending(1);
-                        }
                         trace::header its_header;
                         if (its_header.prepare(its_target, true, _instance))
                             tc_->trace(its_header.data_, VSOMEIP_TRACE_HEADER_SIZE, its_send_data, its_send_size);
@@ -1169,18 +1167,14 @@ bool routing_manager_impl::send_with_sequence(client_t _client, buffer_sequence_
                                 _sequence->attach_completion(_completion);
                             }
                             for (auto const& target : its_targets) {
-                                bool queued = false;
-                                if (target->is_reliable()) {
-                                    queued = its_tcp_server_endpoint->send_to(target, _sequence);
-                                } else {
-                                    queued = its_udp_server_endpoint->send_to(target, _sequence);
-                                }
+                                auto its_send = [&] {
+                                    return target->is_reliable() ? its_tcp_server_endpoint->send_to(target, _sequence)
+                                                                 : its_udp_server_endpoint->send_to(target, _sequence);
+                                };
+                                const bool queued = _completion ? _completion->queue_write(its_send) : its_send();
                                 if (queued) {
                                     has_sent = true;
                                     is_sent = true;
-                                    if (_completion) {
-                                        _completion->add_pending(1);
-                                    }
                                 }
                             }
                             if (has_sent) {
@@ -1204,11 +1198,9 @@ bool routing_manager_impl::send_with_sequence(client_t _client, buffer_sequence_
                             if (_completion) {
                                 _sequence->attach_completion(_completion);
                             }
-                            is_sent = its_target->send(_sequence);
+                            is_sent = _completion ? _completion->queue_write([&] { return its_target->send(_sequence); })
+                                                  : its_target->send(_sequence);
                             if (is_sent) {
-                                if (_completion) {
-                                    _completion->add_pending(1);
-                                }
                                 trace::header its_header;
                                 if (its_header.prepare(its_target, true, _instance))
                                     tc_->trace(its_header.data_, VSOMEIP_TRACE_HEADER_SIZE, its_send_data, its_send_size);
@@ -1447,7 +1439,7 @@ bool routing_manager_impl::send(client_t _client, message_buffer_ptr_t _frame, i
 }
 
 bool routing_manager_impl::send_to(const client_t _client, const std::shared_ptr<endpoint_definition>& _target,
-                                   std::shared_ptr<message> _message) {
+                                   std::shared_ptr<message> _message, send_completion_state_ptr_t _completion) {
 
     (void)_client;
     bool is_sent(false);
@@ -1466,7 +1458,11 @@ bool routing_manager_impl::send_to(const client_t _client, const std::shared_ptr
 
     std::shared_ptr<endpoint> its_endpoint = ep_mgr_impl_->find_server_endpoint(_target->get_remote_port(), _target->is_reliable());
     if (its_endpoint) {
-        is_sent = its_endpoint->send_to(_target, its_sequence);
+        if (_completion) {
+            its_sequence->attach_completion(_completion);
+        }
+        is_sent = _completion ? _completion->queue_write([&] { return its_endpoint->send_to(_target, its_sequence); })
+                              : its_endpoint->send_to(_target, its_sequence);
         if (is_sent) {
             auto its_flat = its_sequence->flatten();
             trace::header its_header;
@@ -1586,11 +1582,15 @@ void routing_manager_impl::notify_one(service_t _service, instance_t _instance, 
             }
 
             if (its_targets.size() > 0) {
-                for (const auto& its_target : its_targets) {
-                    its_event->set_payload(_payload, _client, its_target, _force, nullptr);
-                }
+                // Held across the loop so one target's completed write cannot release the handler
+                // while the others are still being queued.
                 if (_completion) {
                     _completion->begin();
+                }
+                for (const auto& its_target : its_targets) {
+                    its_event->set_payload(_payload, _client, its_target, _force, _completion);
+                }
+                if (_completion) {
                     _completion->end();
                 }
             } else if (_completion) {

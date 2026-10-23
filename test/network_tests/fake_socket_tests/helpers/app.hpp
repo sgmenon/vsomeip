@@ -117,6 +117,12 @@ public:
     void send_event(event_ids const& _ei, std::vector<unsigned char> const& _payload);
 
     /**
+     * Forwards the caller's payload object to vsomeip::application::notify() with a
+     * completion handler, so the caller keeps it and may reuse it afterwards.
+     */
+    void send_event(event_ids const& _ei, std::shared_ptr<vsomeip::payload> const& _payload, std::function<void(bool)> _completion);
+
+    /**
      * After app::start() has been called this helper can be used to await the registration
      * of the application
      **/

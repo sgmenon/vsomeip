@@ -2,9 +2,12 @@
 
 > **Status.** Implemented in this fork on top of
 > [E2E scatter-gather send](e2e-scatter-gather-send.md). Written as a
-> mainline candidate: the wire format is unchanged, existing `send` /
-> `notify` callers keep compiling, and a payload-sized copy happens only
-> when the caller still shares the bytes.
+> mainline candidate: the wire format is unchanged and existing `send` /
+> `notify` callers keep compiling. The stack itself makes no payload-sized
+> copy once the application hands over a payload it no longer holds. The
+> application still makes one if it fills the payload by copying (see
+> [§3](#3-application-contract)), or if it keeps a reference to the payload
+> and passes no completion handler.
 
 ## 1. Why this belongs in mainline
 
@@ -40,15 +43,16 @@ Counts are **payload-sized copies** on the routing-host
 `application::send(message)` path. The 16-byte SOME/IP header and any
 owned E2E meta are separate small buffers.
 
-| Stage                          | Before                         | After                                                |
-| ------------------------------ | ------------------------------ | ---------------------------------------------------- |
-| App `set_data(ptr)`            | 1× into `shared_ptr<payload>`  | unchanged (the caller's own copy into the payload)   |
-| App `set_data(move(vec))`      | 0×                             | 0×                                                   |
-| Serialize full frame           | 1×                             | skipped for non-SD `send(message)`                   |
-| E2E plugin app copy            | 1×                             | 0× (span into the pinned payload)                    |
-| Routing into `buffer_sequence` | 1×                             | 0× (`append_message_payload` pins the backing store) |
-| nPDU train                     | concat into one train buffer   | 0× (`append_sequence` of the same pins)              |
-| Socket queue                   | holds buffers until `send_cbk` | holds the same `shared_ptr`s until `send_cbk`        |
+| Stage                                                              | Before                         | After                                                |
+| ------------------------------------------------------------------ | ------------------------------ | ---------------------------------------------------- |
+| App `create_payload(...)`, `set_data(ptr)`, `set_data(const vec&)` | 1× into `shared_ptr<payload>`  | unchanged (the application's own copy)               |
+| App `set_data(move(vec))`                                          | 0×                             | 0×                                                   |
+| App keeps the payload, no completion                               | 1× snapshot                    | 1× snapshot                                          |
+| Serialize full frame                                               | 1×                             | skipped for non-SD `send(message)`                   |
+| E2E plugin app copy                                                | 1×                             | 0× (span into the pinned payload)                    |
+| Routing into `buffer_sequence`                                     | 1×                             | 0× (`append_message_payload` pins the backing store) |
+| nPDU train                                                         | concat into one train buffer   | 0× (`append_sequence` of the same pins)              |
+| Socket queue                                                       | holds buffers until `send_cbk` | holds the same `shared_ptr`s until `send_cbk`        |
 
 Profile 01 is the exception: CRC, counter, and nibble sit in-band, so
 `protect` packs once into `owned_app_payload`. Header/footer profiles
@@ -59,6 +63,34 @@ options rather than a payload, so that path still serializes into one
 owned buffer.
 
 ## 3. Application contract
+
+### Sending without a copy
+
+There is one way to send application bytes without a payload-sized copy:
+build them in a `std::vector<byte_t>`, move the vector into the payload,
+and hand over the payload and message without keeping references.
+
+```cpp
+std::vector<vsomeip::byte_t> bytes = build_frame();   // the application's own serialization
+auto payload = vsomeip::runtime::get()->create_payload();
+payload->set_data(std::move(bytes));                   // moved, not copied
+message->set_payload(std::move(payload));
+app->send(std::move(message));                         // pinned, not snapshotted
+```
+
+Everything else copies once at the API:
+
+- Every `runtime::create_payload` overload that takes data, plus
+  `payload::set_data(const byte_t*, length_t)` and
+  `payload::set_data(const std::vector<byte_t>&)`, copy the bytes into the
+  payload.
+- A payload cannot wrap memory it does not own. Bytes that live elsewhere,
+  such as a struct, a `std::array`, a pool or shared memory, are copied in.
+- Keeping the `payload` or `message` variable after the call, as the
+  examples do, makes the stack snapshot the bytes unless a completion
+  handler is passed (see below).
+
+### Lifetime and completion
 
 `send`, `notify`, and `notify_one` return after the writes are queued.
 The endpoint holds the `buffer_sequence` until `async_send` /
@@ -102,6 +134,14 @@ is the AND of those results.
 - Debounce that later sends the same field again is outside this call.
 - If nothing is queued (unchanged field, or no subscribers), the handler
   runs immediately with `true`.
+- **Fields and cyclic events** keep the last value for change detection,
+  initial events, and cyclic resends. With a completion handler the event
+  stores its own copy of that value, one copy per change, so reusing the
+  payload after the handler runs cannot alter the cached value. Plain
+  events pin the payload with no copy.
+- **`notify_one` to a remote subscriber** pins the payload like the other
+  paths. The handler runs when the write to each of that client's targets
+  has completed.
 
 `notify` / `notify_one` use `snapshot_payload_if_shared` unless
 `_completion` is set. `send(message)` uses

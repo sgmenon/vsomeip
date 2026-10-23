@@ -14,7 +14,9 @@
 #include <vsomeip/vsomeip.hpp>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdlib>
+#include <future>
 
 namespace vsomeip_v3::testing {
 static std::string const routingmanager_name_{"routingmanagerd"};
@@ -108,6 +110,32 @@ TEST_F(test_client_helper, field_subscription) {
     ASSERT_TRUE(subscribe_to_field());
 
     EXPECT_TRUE(client_->message_record_.wait_for(first_expected_field_message_));
+}
+
+TEST_F(test_client_helper, field_payload_reused_after_completion_is_notified) {
+    start_apps();
+    ASSERT_TRUE(subscribe_to_field());
+
+    auto has_field_payload = [this](std::vector<unsigned char> const& _payload) {
+        return [this, _payload](auto const& _record) {
+            return std::any_of(_record.begin(), _record.end(), [&](message const& _m) {
+                return _m.method_ == offered_field_.event_id_ && _m.payload_ == _payload;
+            });
+        };
+    };
+
+    auto payload = vsomeip::runtime::get()->create_payload(std::vector<vsomeip::byte_t>{0x01, 0x02});
+    std::promise<void> first_done;
+    server_->send_event(offered_field_, payload, [&first_done](bool) { first_done.set_value(); });
+    ASSERT_EQ(first_done.get_future().wait_for(std::chrono::seconds(3)), std::future_status::ready);
+    ASSERT_TRUE(client_->message_record_.wait_for(has_field_payload({0x01, 0x02})));
+
+    // Reuse the same payload object, as allowed once the handler has run. The event must not
+    // have kept it as its cached field value, or this change would be dropped as "unchanged".
+    payload->get_data()[0] = 0x03;
+    payload->get_data()[1] = 0x04;
+    server_->send_event(offered_field_, payload, [](bool) {});
+    EXPECT_TRUE(client_->message_record_.wait_for(has_field_payload({0x03, 0x04})));
 }
 
 TEST_F(test_client_helper, request_reply_no_sub) {
