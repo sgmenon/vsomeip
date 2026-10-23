@@ -133,7 +133,7 @@ private:
     void notify_one_unlocked(client_t _client, const std::shared_ptr<endpoint_definition>& _target,
                              send_completion_state_ptr_t _completion = nullptr);
 
-    bool prepare_update_payload_unlocked(const std::shared_ptr<payload>& _payload, bool _force);
+    bool prepare_update_payload_unlocked(const std::shared_ptr<payload>& _payload, bool _force, bool _caller_keeps_payload = false);
     void update_payload_unlocked();
 
     void get_pending_updates(const std::set<client_t>& _clients);

@@ -113,7 +113,8 @@ TEST(buffer_sequence_test, completion_fires_once_after_pending) {
     });
 
     latch->begin();
-    latch->add_pending(2);
+    EXPECT_TRUE(latch->queue_write([] { return true; }));
+    EXPECT_TRUE(latch->queue_write([] { return true; }));
 
     vsomeip_v3::buffer_sequence a;
     vsomeip_v3::buffer_sequence b;
@@ -128,11 +129,35 @@ TEST(buffer_sequence_test, completion_fires_once_after_pending) {
     EXPECT_TRUE(last_ok);
 }
 
+TEST(buffer_sequence_test, queue_write_waits_for_every_queued_write) {
+    int calls = 0;
+    auto latch = std::make_shared<vsomeip_v3::send_completion_state>([&](bool) { ++calls; });
+    vsomeip_v3::buffer_sequence first;
+    vsomeip_v3::buffer_sequence second;
+    first.attach_completion(latch);
+    second.attach_completion(latch);
+
+    latch->begin();
+    // The first write completes before its send returns, as an io thread may do.
+    EXPECT_TRUE(latch->queue_write([&] {
+        first.complete(true);
+        return true;
+    }));
+    EXPECT_EQ(calls, 0);
+    EXPECT_FALSE(latch->queue_write([] { return false; }));
+    EXPECT_TRUE(latch->queue_write([] { return true; }));
+    latch->end();
+    EXPECT_EQ(calls, 0);
+
+    second.complete(true);
+    EXPECT_EQ(calls, 1);
+}
+
 TEST(buffer_sequence_test, append_sequence_merges_completions) {
     int calls = 0;
     auto latch = std::make_shared<vsomeip_v3::send_completion_state>([&](bool) { ++calls; });
     latch->begin();
-    latch->add_pending(1);
+    EXPECT_TRUE(latch->queue_write([] { return true; }));
 
     vsomeip_v3::buffer_sequence passenger;
     passenger.attach_completion(latch);

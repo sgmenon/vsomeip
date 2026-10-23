@@ -72,7 +72,8 @@ public:
     bool send(client_t _client, std::shared_ptr<message> _message, bool _force,
               send_completion_state_ptr_t _completion = nullptr) override;
 
-    bool send_to(const client_t _client, const std::shared_ptr<endpoint_definition>& _target, std::shared_ptr<message> _message);
+    bool send_to(const client_t _client, const std::shared_ptr<endpoint_definition>& _target, std::shared_ptr<message> _message,
+                 send_completion_state_ptr_t _completion = nullptr) override;
 
     void register_event(client_t _client, service_t _service, instance_t _instance, event_t _notifier,
                         const std::set<eventgroup_t>& _eventgroups, const event_type_e _type, reliability_type_e _reliability,

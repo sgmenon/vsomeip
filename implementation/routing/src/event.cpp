@@ -132,7 +132,7 @@ void event::set_payload(const std::shared_ptr<payload>& _payload, bool _force, s
 
     std::lock_guard<std::mutex> its_lock(mutex_);
     if (is_provided_) {
-        if (prepare_update_payload_unlocked(_payload, _force)) {
+        if (prepare_update_payload_unlocked(_payload, _force, _completion != nullptr)) {
             if (is_updating_on_change_) {
                 if (change_resets_cycle_)
                     stop_cycle();
@@ -162,7 +162,7 @@ void event::set_payload(const std::shared_ptr<payload>& _payload, client_t _clie
 
     std::lock_guard<std::mutex> its_lock(mutex_);
     if (is_provided_) {
-        if (prepare_update_payload_unlocked(_payload, _force)) {
+        if (prepare_update_payload_unlocked(_payload, _force, _completion != nullptr)) {
             if (is_updating_on_change_) {
                 notify_one_unlocked(_client, _force, _completion);
                 _completion.reset();
@@ -185,7 +185,7 @@ void event::set_payload(const std::shared_ptr<payload>& _payload, const client_t
 
     std::lock_guard<std::mutex> its_lock(mutex_);
     if (is_provided_) {
-        if (prepare_update_payload_unlocked(_payload, _force)) {
+        if (prepare_update_payload_unlocked(_payload, _force, _completion != nullptr)) {
             if (is_updating_on_change_) {
                 notify_one_unlocked(_client, _target, _completion);
                 _completion.reset();
@@ -354,10 +354,11 @@ void event::notify_one_unlocked(client_t _client, const std::shared_ptr<endpoint
     if (_target) {
         if (is_set_) {
             set_session();
-            routing_->send_to(_client, _target, update_);
             if (_completion) {
-                // send_to has no completion hook yet; treat as queued for local sync semantics.
                 _completion->begin();
+            }
+            routing_->send_to(_client, _target, update_, _completion);
+            if (_completion) {
                 _completion->end();
             }
         } else {
@@ -407,14 +408,21 @@ bool event::prepare_update_payload(const std::shared_ptr<payload>& _payload, boo
     return prepare_update_payload_unlocked(_payload, _force);
 }
 
-bool event::prepare_update_payload_unlocked(const std::shared_ptr<payload>& _payload, bool _force) {
+bool event::prepare_update_payload_unlocked(const std::shared_ptr<payload>& _payload, bool _force, bool _caller_keeps_payload) {
 
     if (!_force && type_ == event_type_e::ET_FIELD && cycle_ == std::chrono::milliseconds::zero()
         && !has_changed(current_->get_payload(), _payload) && !is_shadow_) {
         return false;
     }
 
-    update_->set_payload(_payload);
+    // Fields and cyclic events read the stored payload back (change detection, initial events,
+    // cyclic sends), so it must not be one the application may still rewrite.
+    const bool is_read_back = type_ == event_type_e::ET_FIELD || cycle_ != std::chrono::milliseconds::zero();
+    if (_caller_keeps_payload && is_read_back && _payload) {
+        update_->set_payload(std::make_shared<payload_impl>(_payload->get_data(), _payload->get_length()));
+    } else {
+        update_->set_payload(_payload);
+    }
 
     if (!is_set_) {
         start_cycle();

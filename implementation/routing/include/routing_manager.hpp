@@ -78,8 +78,8 @@ public:
                       client_t _bound_client = VSOMEIP_ROUTING_CLIENT, const vsomeip_sec_client_t* _sec_client = nullptr,
                       uint8_t _status_check = 0, bool _sent_from_remote = false, bool _force = true) = 0;
 
-    virtual bool send_to(const client_t _client, const std::shared_ptr<endpoint_definition>& _target,
-                         std::shared_ptr<message> _message) = 0;
+    virtual bool send_to(const client_t _client, const std::shared_ptr<endpoint_definition>& _target, std::shared_ptr<message> _message,
+                         send_completion_state_ptr_t _completion = nullptr) = 0;
 
     virtual void register_event(client_t _client, service_t _service, instance_t _instance, event_t _notifier,
                                 const std::set<eventgroup_t>& _eventgroups, const event_type_e _type, reliability_type_e _reliability,
