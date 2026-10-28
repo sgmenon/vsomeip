@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Copyright (C) 2026 GM Global Technology Operations LLC.
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# Two routing hosts on this ECU, both receiving on port 50000. Lane A joins
+# only 239.195.233.1 and lane B only 239.195.233.0.
+VSOMEIP_CONFIGURATION=multicast_isolation_test_client_a.json \
+VSOMEIP_APPLICATION_NAME=multicast_isolation_client_A \
+    ./multicast_isolation_test_client A &
+CLIENT_A_PID=$!
+
+VSOMEIP_CONFIGURATION=multicast_isolation_test_client_b.json \
+VSOMEIP_APPLICATION_NAME=multicast_isolation_client_B \
+    ./multicast_isolation_test_client B &
+CLIENT_B_PID=$!
+
+FAIL=0
+wait "$CLIENT_A_PID" || FAIL=1
+wait "$CLIENT_B_PID" || FAIL=1
+
+exit "$FAIL"
