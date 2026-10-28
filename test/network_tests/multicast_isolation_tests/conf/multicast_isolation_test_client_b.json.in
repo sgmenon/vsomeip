@@ -1,0 +1,26 @@
+{
+    "unicast": "@TEST_IP_SLAVE@",
+    "network": "vsomeip-mcast-b",
+    "logging": {
+        "level": "debug",
+        "console": "true",
+        "file": {
+            "enable": "false",
+            "path": "/tmp/vsomeip.log"
+        },
+        "dlt": "false"
+    },
+    "applications": [
+        {
+            "name": "multicast_isolation_client_B",
+            "id": "0x1b01"
+        }
+    ],
+    "routing": "multicast_isolation_client_B",
+    "service-discovery": {
+        "enable": "true",
+        "multicast": "224.0.0.1",
+        "port": "30491",
+        "protocol": "udp"
+    }
+}

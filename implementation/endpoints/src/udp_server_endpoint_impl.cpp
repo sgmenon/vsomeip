@@ -3,6 +3,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+#include <cerrno>
+#include <cstring>
 #include <iomanip>
 #include <sstream>
 #include <thread>
@@ -28,6 +30,27 @@
 namespace ip = boost::asio::ip;
 
 namespace vsomeip_v3 {
+
+namespace {
+
+// Key for joined_ and join_status_. IP_PKTINFO reports the destination
+// without a scope id, and configured groups may be written in any case.
+std::string group_key(const ip::address& _address) {
+    if (_address.is_v6()) {
+        auto its_address = _address.to_v6();
+        its_address.scope_id(0);
+        return its_address.to_string();
+    }
+    return _address.to_string();
+}
+
+std::string group_key(const std::string& _address) {
+    boost::system::error_code its_error;
+    const auto its_address = ip::make_address(_address, its_error);
+    return its_error ? _address : group_key(its_address);
+}
+
+} // namespace
 
 udp_server_endpoint_impl::udp_server_endpoint_impl(const std::shared_ptr<endpoint_host>& _endpoint_host,
                                                    const std::shared_ptr<routing_host>& _routing_host, boost::asio::io_context& _io,
@@ -472,11 +495,11 @@ bool udp_server_endpoint_impl::is_joined(const std::string& _address, bool& _rec
 //
 bool udp_server_endpoint_impl::is_joined_unlocked(const std::string& _address) const {
 
-    return (joined_.find(_address) != joined_.end());
+    return (joined_.find(group_key(_address)) != joined_.end());
 }
 
 bool udp_server_endpoint_impl::is_joined_unlocked(const std::string& _address, bool& _received) const {
-    const auto found_address = joined_.find(_address);
+    const auto found_address = joined_.find(group_key(_address));
     if (found_address != joined_.end()) {
         _received = found_address->second;
     } else {
@@ -497,7 +520,7 @@ void udp_server_endpoint_impl::join_unlocked(const std::string& _address) {
 
     try {
         if (!is_joined_unlocked(_address)) {
-            joined_[_address] = false;
+            joined_[group_key(_address)] = false;
 
             auto its_endpoint_host = endpoint_host_.lock();
             if (its_endpoint_host) {
@@ -525,7 +548,7 @@ void udp_server_endpoint_impl::leave_unlocked(const std::string& _address) {
 
     try {
         if (is_joined_unlocked(_address)) {
-            joined_.erase(_address);
+            joined_.erase(group_key(_address));
 
             auto its_endpoint_host = endpoint_host_.lock();
             if (its_endpoint_host) {
@@ -591,6 +614,11 @@ void udp_server_endpoint_impl::on_multicast_received(const boost::system::error_
 
         {
             std::scoped_lock its_lock(sync_);
+            // A socket bound to the wildcard address also receives groups that
+            // other sockets on this host joined on the same port.
+            if (_destination.is_multicast() && joined_.find(group_key(_destination)) == joined_.end()) {
+                return;
+            }
             own_message = _sender.address() == local_.address();
             own_subnet = is_same_subnet_unlocked(_sender.address());
             own_callback = receive_own_multicast_messages_ ? on_sent_multicast_received_ : nullptr;
@@ -849,7 +877,8 @@ void udp_server_endpoint_impl::set_multicast_option(const boost::asio::ip::addre
         return;
     }
 
-    bool has_joined = multicast_socket_ && join_status_.find(_address.to_string()) != join_status_.end();
+    const auto its_group_key = group_key(_address);
+    bool has_joined = multicast_socket_ && join_status_.find(its_group_key) != join_status_.end();
 
     if (_is_join && has_joined) {
         // We can skip the join operation, but we don't skip the leave operation
@@ -897,6 +926,26 @@ void udp_server_endpoint_impl::set_multicast_option(const boost::asio::ip::addre
             int its_pktinfo_option(1);
             ::setsockopt(multicast_socket_->native_handle(), (is_v4_ ? IPPROTO_IP : IPPROTO_IPV6), (is_v4_ ? IP_PKTINFO : IPV6_RECVPKTINFO),
                          &its_pktinfo_option, sizeof(its_pktinfo_option));
+#endif
+
+#ifdef __linux__
+            // Only deliver groups joined on this socket, not every group joined
+            // on this host for the same port.
+            int its_multicast_all_option(0);
+            int its_multicast_all_result(0);
+            if (is_v4_) {
+                its_multicast_all_result = ::setsockopt(multicast_socket_->native_handle(), IPPROTO_IP, IP_MULTICAST_ALL,
+                                                        &its_multicast_all_option, sizeof(its_multicast_all_option));
+            }
+#ifdef IPV6_MULTICAST_ALL
+            else {
+                its_multicast_all_result = ::setsockopt(multicast_socket_->native_handle(), IPPROTO_IPV6, IPV6_MULTICAST_ALL,
+                                                        &its_multicast_all_option, sizeof(its_multicast_all_option));
+            }
+#endif
+            if (its_multicast_all_result == -1) {
+                VSOMEIP_WARNING << instance_name_ << __func__ << ": failed to disable multicast_all, " << std::strerror(errno);
+            }
 #endif
 
             if (!multicast_local_) {
@@ -984,8 +1033,8 @@ void udp_server_endpoint_impl::set_multicast_option(const boost::asio::ip::addre
         std::ignore = multicast_socket_->set_option(its_join_option, _error);
 
         if (!_error) {
-            joined_[_address.to_string()] = true;
-            join_status_[_address.to_string()] = true;
+            joined_[its_group_key] = true;
+            join_status_[its_group_key] = true;
             VSOMEIP_INFO << instance_name_ << __func__ << ": join successful";
         } else {
             VSOMEIP_ERROR << instance_name_ << __func__ << ": join failure, " << _error.message()
@@ -996,7 +1045,7 @@ void udp_server_endpoint_impl::set_multicast_option(const boost::asio::ip::addre
             // See https://stackoverflow.com/questions/45442416
         }
     } else {
-        join_status_.erase(_address.to_string());
+        join_status_.erase(its_group_key);
 
         if (multicast_socket_ && multicast_socket_->is_open()) {
             boost::asio::ip::multicast::leave_group its_leave_option(_address);

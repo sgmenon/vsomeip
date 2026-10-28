@@ -1,0 +1,51 @@
+{
+    "unicast": "@TEST_IP_MASTER@",
+    "network": "vsomeip-mcast-a",
+    "logging": {
+        "level": "debug",
+        "console": "true",
+        "file": {
+            "enable": "false",
+            "path": "/tmp/vsomeip.log"
+        },
+        "dlt": "false"
+    },
+    "applications": [
+        {
+            "name": "multicast_isolation_service_A",
+            "id": "0x2a01"
+        }
+    ],
+    "services": [
+        {
+            "service": "0x1111",
+            "instance": "0x0001",
+            "unreliable": "30511",
+            "events": [
+                {
+                    "event": "0x8001"
+                }
+            ],
+            "eventgroups": [
+                {
+                    "eventgroup": "0x0001",
+                    "events": [
+                        "0x8001"
+                    ],
+                    "multicast": {
+                        "address": "239.195.233.1",
+                        "port": "50000"
+                    },
+                    "threshold": "1"
+                }
+            ]
+        }
+    ],
+    "routing": "multicast_isolation_service_A",
+    "service-discovery": {
+        "enable": "true",
+        "multicast": "224.0.0.1",
+        "port": "30490",
+        "protocol": "udp"
+    }
+}

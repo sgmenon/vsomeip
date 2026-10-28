@@ -208,6 +208,75 @@ TEST_F(usei_fixture, basic_multicast) {
     server_->stop(false);
 }
 
+// Feeds one SOME/IP notification to on_multicast_received as if IP_PKTINFO
+// reported `_destination`, and returns how many times it reached the routing host.
+struct usei_multicast_destination_fixture : public usei_fixture {
+    void SetUp() override {
+        usei_fixture::SetUp();
+        EXPECT_CALL(*endpoint_, add_multicast_option).Times(AnyNumber());
+    }
+
+    void use_local(const char* _address) {
+        server_->local_ = boost::asio::ip::udp::endpoint(boost::asio::ip::make_address(_address), 50000);
+        server_->is_v4_ = server_->local_.address().is_v4();
+        server_->netmask_ = boost::asio::ip::make_address("255.255.255.0");
+        server_->prefix_ = 64;
+    }
+
+    int deliver(const char* _sender, const char* _destination) {
+        int its_count{0};
+        EXPECT_CALL(*routing_, on_message).WillRepeatedly([&](auto&&...) { ++its_count; });
+
+        // service 0x1111, event 0x8001, length 8, protocol 1, interface 1, NOTIFICATION, E_OK
+        auto its_buffer = std::make_shared<vsomeip_v3::message_buffer_t>(vsomeip_v3::message_buffer_t{
+                0x11, 0x11, 0x80, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x01, 0x01, 0x02, 0x00});
+        server_->on_multicast_received(boost::system::error_code(), its_buffer->size(),
+                                       boost::asio::ip::udp::endpoint(boost::asio::ip::make_address(_sender), 30509),
+                                       boost::asio::ip::make_address(_destination), its_buffer);
+
+        Mock::VerifyAndClearExpectations(routing_.get());
+        return its_count;
+    }
+};
+
+TEST_F(usei_multicast_destination_fixture, group_joined_by_another_socket_is_dropped) {
+    use_local("127.0.0.1");
+    server_->join("239.195.233.1");
+
+    EXPECT_EQ(deliver("127.0.0.2", "239.195.233.0"), 0);
+    EXPECT_EQ(deliver("127.0.0.2", "239.195.233.1"), 1);
+}
+
+TEST_F(usei_multicast_destination_fixture, unicast_destination_is_delivered) {
+    use_local("127.0.0.1");
+    server_->join("239.195.233.1");
+
+    EXPECT_EQ(deliver("127.0.0.2", "127.0.0.1"), 1);
+}
+
+// "multicast": "ff02::4:c%1" in the configuration. IP_PKTINFO reports the
+// destination without the interface, so the group must match without it.
+TEST_F(usei_multicast_destination_fixture, group_with_interface_suffix_is_delivered) {
+    use_local("fd00::10");
+    server_->join("ff02::4:c%1");
+
+    EXPECT_TRUE(server_->is_joined("ff02::4:c"));
+    EXPECT_EQ(deliver("fd00::20", "ff02::4:c"), 1);
+}
+
+// "multicast": "FF0E::4:C" in the configuration.
+TEST_F(usei_multicast_destination_fixture, group_written_in_uppercase_is_one_entry) {
+    use_local("fd00::10");
+    server_->join("FF0E::4:C");
+    server_->join("ff0e::4:c");
+
+    EXPECT_EQ(server_->joined_.size(), 1u);
+    EXPECT_EQ(deliver("fd00::20", "ff0e::4:c"), 1);
+
+    server_->leave("ff0e::4:c");
+    EXPECT_TRUE(server_->joined_.empty());
+}
+
 TEST_F(usei_fixture, no_overwrite_during_restart) {
     constexpr size_t MESSAGE_SENT_COUNT = 10000;
     using namespace std::chrono_literals;
