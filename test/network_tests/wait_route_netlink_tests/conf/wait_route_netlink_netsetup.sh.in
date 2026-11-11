@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 GM GLOBAL TECHNOLOGY OPERATIONS LLC ALL RIGHTS RESERVED.
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# Multicast route for SD lives on a dummy interface while unicast stays on eth0.
+# vsomeip only treats the SD route as "up" when RTA_OIF matches the unicast IF.
+
+readonly WAIT_ROUTE_NETLINK_DUMMY_IF=dummy-sd
+readonly WAIT_ROUTE_NETLINK_READY_MSG="SOME/IP routing ready."
+
+wait_route_netlink_move_sd_route_off_eth0() {
+    ip link add "${WAIT_ROUTE_NETLINK_DUMMY_IF}" type dummy 2>/dev/null || true
+    ip link set "${WAIT_ROUTE_NETLINK_DUMMY_IF}" up
+    ip route del multicast 224.0.0.0/4 dev eth0 2>/dev/null || true
+    ip route del 224.0.0.0/4 dev eth0 2>/dev/null || true
+    ip route replace 224.0.0.0/4 dev "${WAIT_ROUTE_NETLINK_DUMMY_IF}"
+}
+
+wait_route_netlink_restore_eth0_multicast_route() {
+    ip route del 224.0.0.0/4 dev "${WAIT_ROUTE_NETLINK_DUMMY_IF}" 2>/dev/null || true
+    ip link del "${WAIT_ROUTE_NETLINK_DUMMY_IF}" 2>/dev/null || true
+    ip route add multicast 224.0.0.0/4 dev eth0 2>/dev/null || true
+}
+
+wait_route_netlink_add_sd_route_on_eth0() {
+    ip route add 224.0.0.0/4 dev eth0 2>/dev/null || ip route replace 224.0.0.0/4 dev eth0
+}
+
+wait_route_netlink_await_routing_ready() {
+    local log_file=$1
+    local max_seconds=$2
+    local i
+
+    for ((i = 1; i <= max_seconds; i++)); do
+        if grep -q "${WAIT_ROUTE_NETLINK_READY_MSG}" "${log_file}" 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
