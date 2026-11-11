@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Copyright (C) 2026 GM GLOBAL TECHNOLOGY OPERATIONS LLC ALL RIGHTS RESERVED.
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=wait_route_netlink_netsetup.sh
+source "${SCRIPT_DIR}/wait_route_netlink_netsetup.sh"
+
+LOG_FILE="${SCRIPT_DIR}/wait_route_netlink_wait_true.log"
+DAEMON_PID=""
+
+cleanup() {
+    [[ -n "${DAEMON_PID}" ]] && kill "${DAEMON_PID}" 2>/dev/null || true
+    wait "${DAEMON_PID}" 2>/dev/null || true
+    wait_route_netlink_restore_eth0_multicast_route
+}
+
+trap cleanup EXIT
+
+wait_route_netlink_move_sd_route_off_eth0
+
+export VSOMEIP_CONFIGURATION="${SCRIPT_DIR}/wait_route_netlink_wait_true.json"
+export VSOMEIP_APPLICATION_NAME=routingmanagerd
+
+: >"${LOG_FILE}"
+../../../examples/routingmanagerd/routingmanagerd >>"${LOG_FILE}" 2>&1 &
+DAEMON_PID=$!
+
+sleep 12
+if grep -q "${WAIT_ROUTE_NETLINK_READY_MSG}" "${LOG_FILE}"; then
+    echo "Routing became ready too early with wait_route_netlink_notification=true and no SD route on eth0" >&2
+    tail -n 40 "${LOG_FILE}" >&2 || true
+    exit 1
+fi
+
+wait_route_netlink_add_sd_route_on_eth0
+
+if ! wait_route_netlink_await_routing_ready "${LOG_FILE}" 30; then
+    echo "Expected '${WAIT_ROUTE_NETLINK_READY_MSG}' after adding SD multicast route on eth0" >&2
+    tail -n 40 "${LOG_FILE}" >&2 || true
+    exit 1
+fi
+
+echo "wait_route_netlink_wait_true_test: routing became ready only after eth0 SD route"

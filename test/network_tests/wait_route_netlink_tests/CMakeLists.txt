@@ -1,0 +1,38 @@
+# Copyright (C) 2026 GM GLOBAL TECHNOLOGY OPERATIONS LLC ALL RIGHTS RESERVED.
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+project(wait_route_netlink_tests LANGUAGES CXX)
+
+set(configuration_files
+    wait_route_netlink_netsetup.sh
+    wait_route_netlink_wait_false.json
+    wait_route_netlink_wait_true.json
+    wait_route_netlink_wait_false_starter.sh
+    wait_route_netlink_wait_true_starter.sh
+)
+configure_files("${configuration_files}")
+
+foreach(wait_route_netlink_script
+    wait_route_netlink_netsetup.sh
+    wait_route_netlink_wait_false_starter.sh
+    wait_route_netlink_wait_true_starter.sh
+)
+    file(CHMOD u+x "${CMAKE_CURRENT_BINARY_DIR}/${wait_route_netlink_script}")
+endforeach()
+
+add_custom_target(wait_route_netlink_tests_scripts ALL)
+add_dependencies(build_network_tests wait_route_netlink_tests_scripts)
+
+add_custom_test(
+    NAME wait_route_netlink_wait_false_test
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/wait_route_netlink_wait_false_starter.sh
+    TIMEOUT 45
+)
+
+add_custom_test(
+    NAME wait_route_netlink_wait_true_test
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/wait_route_netlink_wait_true_starter.sh
+    TIMEOUT 60
+)

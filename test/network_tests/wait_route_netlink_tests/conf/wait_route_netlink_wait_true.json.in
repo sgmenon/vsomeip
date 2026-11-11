@@ -1,0 +1,33 @@
+{
+    "unicast": "@TEST_IP_MASTER@",
+    "logging": {
+        "level": "info",
+        "console": "true",
+        "file": {
+            "enable": "false"
+        }
+    },
+    "applications": [
+        {
+            "name": "routingmanagerd",
+            "id": "0x0001"
+        }
+    ],
+    "routing": {
+        "host": {
+            "name": "routingmanagerd",
+            "unicast": "@TEST_IP_MASTER@",
+            "port": "31491"
+        },
+        "guests": {
+            "unicast": "@TEST_IP_MASTER@"
+        }
+    },
+    "service-discovery": {
+        "enable": "true",
+        "multicast": "224.0.0.1",
+        "port": "30490",
+        "protocol": "udp",
+        "wait_route_netlink_notification": "true"
+    }
+}
