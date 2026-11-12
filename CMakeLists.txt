@@ -184,6 +184,12 @@ if (VSOMEIP_DISABLE_ENV_VARS)
     message(STATUS "  vsomeip: vulnerable environment variables loading is DISABLED (VSOMEIP_DISABLE_ENV_VARS)")
 endif ()
 
+option(VSOMEIP_STATIC_PLUGINS "Resolve the SD, E2E and configuration plugins at link time instead of dlopen" OFF)
+if (VSOMEIP_STATIC_PLUGINS)
+    add_definitions(-DVSOMEIP_STATIC_PLUGINS)
+    message(STATUS "  vsomeip: plugins are resolved at link time (VSOMEIP_STATIC_PLUGINS)")
+endif ()
+
 # Suppress deprecation warnings for vSomeIP interfaces
 add_definitions(-DVSOMEIP_INTERNAL_SUPPRESS_DEPRECATED)
 

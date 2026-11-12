@@ -19,7 +19,12 @@ foreach(wait_route_netlink_script
     wait_route_netlink_wait_false_starter.sh
     wait_route_netlink_wait_true_starter.sh
 )
-    file(CHMOD u+x "${CMAKE_CURRENT_BINARY_DIR}/${wait_route_netlink_script}")
+    # configure_file writes these as 0644. file(CHMOD) sets the mode; it does
+    # not take a chmod-style "u+x".
+    file(CHMOD "${CMAKE_CURRENT_BINARY_DIR}/${wait_route_netlink_script}"
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                    GROUP_READ GROUP_EXECUTE
+                    WORLD_READ WORLD_EXECUTE)
 endforeach()
 
 add_custom_target(wait_route_netlink_tests_scripts ALL)

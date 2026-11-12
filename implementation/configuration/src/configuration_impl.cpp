@@ -22,12 +22,8 @@
 #include <boost/property_tree/json_parser.hpp>
 
 #include <vsomeip/constants.hpp>
-#include <vsomeip/plugins/application_plugin.hpp>
-#include <vsomeip/plugins/pre_configuration_plugin.hpp>
 #include <vsomeip/internal/logger.hpp>
 #include <vsomeip/structured_types.hpp>
-#include <vsomeip/internal/plugin_manager.hpp>
-
 #include "../include/client.hpp"
 #include "../include/configuration_impl.hpp"
 #include "../include/event.hpp"
@@ -896,7 +892,6 @@ void configuration_impl::load_application_data(const boost::property_tree::ptree
     std::size_t its_max_detached_thread_wait_time(VSOMEIP_MAX_WAIT_TIME_DETACHED_THREADS);
     std::size_t its_io_thread_count(VSOMEIP_DEFAULT_IO_THREAD_COUNT);
     std::size_t its_request_debounce_time(VSOMEIP_REQUEST_DEBOUNCE_TIME);
-    std::map<plugin_type_e, std::set<std::string>> plugins;
     int its_io_thread_nice_level(VSOMEIP_DEFAULT_IO_THREAD_NICE_LEVEL);
     debounce_configuration_t its_debounces;
     bool has_session_handling(true);
@@ -943,7 +938,7 @@ void configuration_impl::load_application_data(const boost::property_tree::ptree
                 its_request_debounce_time = 10000;
             }
         } else if (its_key == "plugins") {
-            plugins = load_plugins(i->second, its_name);
+            VSOMEIP_WARNING << "Application plug-ins are no longer supported. Ignoring \"plugins\" in " << _file_name;
         } else if (its_key == "debounce") {
             try {
                 for (auto j = i->second.begin(); j != i->second.end(); ++j) {
@@ -975,96 +970,12 @@ void configuration_impl::load_application_data(const boost::property_tree::ptree
                                        its_max_detached_thread_wait_time,
                                        its_io_thread_count,
                                        its_request_debounce_time,
-                                       plugins,
                                        its_io_thread_nice_level,
                                        its_debounces,
                                        has_session_handling};
         } else {
             VSOMEIP_WARNING << "Multiple configurations for application " << its_name << ". Ignoring a configuration from " << _file_name;
         }
-    }
-}
-
-std::map<plugin_type_e, std::set<std::string>> configuration_impl::load_plugins(const boost::property_tree::ptree& _tree,
-                                                                                const std::string& _application_name) {
-    std::map<plugin_type_e, std::set<std::string>> its_plugins;
-    std::string its_name("");
-    std::string its_type;
-    for (auto i = _tree.begin(); i != _tree.end(); ++i) {
-        bool its_configured[ET_MAX] = {0};
-        for (auto l = i->second.begin(); l != i->second.end(); ++l) {
-            std::string its_inner_key(l->first);
-            std::string its_inner_value(l->second.data());
-
-            if (its_inner_key == "name") {
-                if (its_configured[ET_PLUGIN_NAME]) {
-                    VSOMEIP_WARNING << "Multiple definitions of plugins.name."
-                                    << " Ignoring definition from " << its_inner_value;
-                } else {
-                    its_name = its_inner_value;
-                    its_configured[ET_PLUGIN_NAME] = true;
-                }
-            } else if (its_inner_key == "type") {
-                if (its_configured[ET_PLUGIN_TYPE]) {
-                    VSOMEIP_WARNING << "Multiple definitions of plugins.type."
-                                    << " Ignoring definition from " << its_inner_value;
-                } else {
-                    its_type = its_inner_value;
-                    its_configured[ET_PLUGIN_TYPE] = true;
-                }
-            } else if (its_inner_key == "additional") {
-                if (its_configured[ET_PLUGIN_NAME]) {
-                    const boost::property_tree::ptree& its_additional_tree(l->second);
-                    for (auto m = its_additional_tree.begin(); m != its_additional_tree.end(); ++m) {
-                        for (auto n = m->second.begin(); n != m->second.end(); ++n) {
-                            std::string its_additional_inner_key(n->first);
-                            std::string its_additional_inner_value(n->second.data());
-                            plugins_additional_[_application_name][its_name][its_additional_inner_key] = its_additional_inner_value;
-                        }
-                    }
-                }
-            } else {
-                // support old config format (type : name)
-                plugin_config_data_t its_plugin_data = {its_inner_value, its_inner_key};
-                add_plugin(its_plugins, its_plugin_data, _application_name);
-            }
-        }
-
-        if (its_configured[ET_PLUGIN_NAME] && its_configured[ET_PLUGIN_TYPE]) {
-            plugin_config_data_t its_plugin_data = {its_name, its_type};
-            add_plugin(its_plugins, its_plugin_data, _application_name);
-        }
-    }
-
-    return its_plugins;
-}
-
-void configuration_impl::add_plugin(std::map<plugin_type_e, std::set<std::string>>& _plugins, const plugin_config_data_t& _plugin_data,
-                                    const std::string& _application_name) {
-
-#ifdef _WIN32
-    std::string its_library(_plugin_data.name_);
-    its_library += ".dll";
-#else
-    std::string its_library("lib");
-    its_library += _plugin_data.name_;
-    its_library += ".so";
-#endif
-
-    if (_plugin_data.type_ == "application_plugin") {
-#if defined(__linux__) || defined(__QNX__)
-        its_library += ".";
-        its_library += (VSOMEIP_APPLICATION_PLUGIN_VERSION + '0');
-#endif
-        _plugins[plugin_type_e::APPLICATION_PLUGIN].insert(its_library);
-    } else if (_plugin_data.type_ == "configuration_plugin") {
-#if defined(__linux__) || defined(__QNX__)
-        its_library += ".";
-        its_library += (VSOMEIP_PRE_CONFIGURATION_PLUGIN_VERSION + '0');
-#endif
-        _plugins[plugin_type_e::PRE_CONFIGURATION_PLUGIN].insert(its_library);
-    } else {
-        VSOMEIP_WARNING << "Unknown plug-in type (" << _plugin_data.type_ << ") configured for client: " << _application_name;
     }
 }
 
@@ -3585,26 +3496,8 @@ std::uint32_t configuration_impl::get_permissions_uds() const {
     return permissions_uds_;
 }
 
-std::map<plugin_type_e, std::set<std::string>> configuration_impl::get_plugins(const std::string& _name) const {
-
-    std::map<plugin_type_e, std::set<std::string>> its_plugins;
-
-    auto found_application = applications_.find(_name);
-    if (found_application != applications_.end()) {
-        its_plugins = found_application->second.plugins_;
-    }
-
-    return its_plugins;
-}
-
 void configuration_impl::set_configuration_path(const std::string& _path) {
     configuration_path_ = _path;
-}
-
-std::map<std::string, std::string> configuration_impl::get_additional_data(const std::string& _application_name,
-                                                                           const std::string& _plugin_name) {
-
-    return plugins_additional_[_application_name][_plugin_name];
 }
 
 bool configuration_impl::is_e2e_enabled() const {

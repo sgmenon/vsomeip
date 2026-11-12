@@ -4,13 +4,22 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 #include <vsomeip/internal/logger.hpp>
+#include <vsomeip/plugins/builtin_plugins.hpp>
 
 #include "../include/configuration_plugin_impl.hpp"
 #include "../include/configuration_impl.hpp"
 
+// See runtime_impl.cpp: this symbol is shared by every plugin, so it is
+// omitted from the static build.
+#ifndef VSOMEIP_STATIC_PLUGINS
 VSOMEIP_PLUGIN(vsomeip_v3::configuration_plugin_impl)
+#endif
 
 namespace vsomeip_v3 {
+
+std::shared_ptr<plugin> create_configuration_plugin() {
+    return configuration_plugin_impl::get_plugin();
+}
 
 configuration_plugin_impl::configuration_plugin_impl() :
     plugin_impl("vsomeip-configuration-plugin", VSOMEIP_CONFIG_PLUGIN_VERSION, plugin_type_e::CONFIGURATION_PLUGIN) { }

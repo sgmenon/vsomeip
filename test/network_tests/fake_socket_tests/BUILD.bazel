@@ -35,15 +35,12 @@ cc_test(
         ".",
         "helpers",
     ],
-    # Keep libvsomeip3-sd.so.3 as DT_NEEDED even though the test never
-    # references an SD symbol directly — plugin_manager dlopens that soname.
     linkopts = [
-        "-Wl,--no-as-needed",
         "-Wl,-rpath,$$ORIGIN",
     ],
     deps = [
         "//:vsomeip-lib",
-        "//:vsomeip-sd",
+        "//:vsomeip-plugins",
         "//test/common:vsomeip_utilities",
         "@boost.asio",
         "@boost.system",

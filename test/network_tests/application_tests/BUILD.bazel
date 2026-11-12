@@ -38,7 +38,7 @@ _LINKOPTS = [
 _DEPS = [
     ":application_test_in_process_hdrs",
     "//:vsomeip-lib",
-    "//:vsomeip-sd",
+    "//:vsomeip-plugins",
     "//test/common:vsomeip_utilities",
     "//test/network_tests:someip_test_globals",
     "@googletest//:gtest",

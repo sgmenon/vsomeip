@@ -34,7 +34,7 @@ cc_test(
     ],
     deps = [
         "//:vsomeip-lib",
-        "//:vsomeip-sd",
+        "//:vsomeip-plugins",
         "@googletest//:gtest",
     ],
 )

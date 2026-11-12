@@ -348,6 +348,11 @@ void routing_manager_impl::init() {
 
         const char *its_sd_module = VSOMEIP_GETENV(VSOMEIP_ENV_SD_MODULE);
         std::string plugin_name = its_sd_module != nullptr ? its_sd_module : VSOMEIP_SD_LIBRARY;
+#ifdef VSOMEIP_STATIC_PLUGINS
+        if (its_sd_module != nullptr) {
+            VSOMEIP_WARNING << VSOMEIP_ENV_SD_MODULE << " is ignored: this build links its SD plugin at build time.";
+        }
+#endif
         auto its_plugin = plugin_manager::get()->get_plugin(plugin_type_e::SD_RUNTIME_PLUGIN, plugin_name);
 
         VSOMEIP_INFO << "Loading SD module " << plugin_name;
@@ -368,8 +373,13 @@ void routing_manager_impl::init() {
 
         const char* its_e2e_module = VSOMEIP_GETENV(VSOMEIP_ENV_E2E_PROTECTION_MODULE);
         std::string plugin_name = its_e2e_module != nullptr ? its_e2e_module : VSOMEIP_E2E_LIBRARY;
+#ifdef VSOMEIP_STATIC_PLUGINS
+        if (its_e2e_module != nullptr) {
+            VSOMEIP_WARNING << VSOMEIP_ENV_E2E_PROTECTION_MODULE << " is ignored: this build links its E2E plugin at build time.";
+        }
+#endif
 
-        auto its_plugin = plugin_manager::get()->get_plugin(plugin_type_e::APPLICATION_PLUGIN, plugin_name);
+        auto its_plugin = plugin_manager::get()->get_plugin(plugin_type_e::E2E_PLUGIN, plugin_name);
         if (its_plugin) {
             VSOMEIP_INFO << "E2E module loaded.";
             e2e_provider_ = std::dynamic_pointer_cast<e2e::e2e_provider>(its_plugin);

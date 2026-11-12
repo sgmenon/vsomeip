@@ -161,16 +161,13 @@ vsomeip that already do the work.
 
 ### 4.1 The plugin-manager lookup in `init()`
 
-`service_discovery_impl::init()` looks up its own SD runtime factory
-through `plugin_manager::get()->get_plugin(SD_RUNTIME_PLUGIN, ...)`,
-which ends in `dlopen("libvsomeip3-sd.so.3", RTLD_LAZY|RTLD_LOCAL)`.
-That's recoverable, but it needs care: as long as
-`libvsomeip3-sd.so.3` is a `DT_NEEDED` link dependency of the
-standalone host binary, the loader has already mapped it at process
-start, and the `dlopen` is a refcount bump on the already-loaded copy.
-Same singleton, no runtime filesystem search, no `LD_LIBRARY_PATH`
-dependency at run time. A standalone host that just links against
-`libvsomeip3-sd.so.3` gets this for free.
+`service_discovery_impl::init()` used to look up its own SD runtime
+factory through `plugin_manager::get()->get_plugin(SD_RUNTIME_PLUGIN, ...)`,
+which ended in `dlopen("libvsomeip3-sd.so.3", RTLD_LAZY|RTLD_LOCAL)`.
+That lookup is gone; see
+[static-plugin-registry.md §3.4](static-plugin-registry.md). A standalone
+host that constructs `service_discovery_impl` directly no longer touches
+the plugin manager for SD.
 
 ### 4.2 The host callback surface
 

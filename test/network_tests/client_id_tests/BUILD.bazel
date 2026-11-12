@@ -4,16 +4,8 @@
 # VSOMEIP_CONFIGURATION). Multi-host client_id_test_*_ports suites stay on
 # the CMake / Docker path.
 
-load("@rules_cc//cc:cc_import.bzl", "cc_import")
 load("@rules_cc//cc:defs.bzl", "cc_test")
 load("//test/network_tests:tsan.bzl", "TSAN_OPTIONS", "TSAN_SUPPRESSIONS")
-
-# DT_NEEDED libvsomeip3-cfg.so.3: this binary calls plugin_manager for the
-# configuration plugin (CMake links ${VSOMEIP_NAME}-cfg).
-cc_import(
-    name = "vsomeip3-cfg-import",
-    shared_library = "//:vsomeip3-cfg",
-)
 
 _LINKOPTS = [
     "-Wl,--no-as-needed",
@@ -21,9 +13,8 @@ _LINKOPTS = [
 ]
 
 _DEPS = [
-    ":vsomeip3-cfg-import",
     "//:vsomeip-lib",
-    "//:vsomeip-sd",
+    "//:vsomeip-plugins",
     "//test/common:vsomeip_utilities",
     "//test/network_tests:someip_test_globals",
     "@googletest//:gtest",

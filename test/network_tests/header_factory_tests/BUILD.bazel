@@ -14,7 +14,7 @@ cc_test(
     ],
     deps = [
         "//:vsomeip-lib",
-        "//:vsomeip-sd",
+        "//:vsomeip-plugins",
         "//test/common:vsomeip_utilities",
         "//test/network_tests:someip_test_globals",
         "@googletest//:gtest",

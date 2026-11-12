@@ -9,7 +9,7 @@ package(default_visibility = ["//test/network_tests:__subpackages__"])
 
 _COMMON_DEPS = [
     "//:vsomeip",
-    "//:vsomeip-sd",
+    "//:vsomeip-plugins",
     "//test/common:vsomeip_utilities",
     "//test/network_tests:someip_test_globals",
     "@googletest//:gtest",
@@ -61,9 +61,9 @@ cc_binary(
     name = "e2e_profile_04_test_service",
     testonly = True,
     srcs = [
+        "e2e_profile_04_test_common.hpp",
         "e2e_profile_04_test_service.cpp",
         "e2e_profile_04_test_service.hpp",
-        "e2e_profile_04_test_common.hpp",
     ],
     includes = ["."],
     linkopts = _COMMON_LINKOPTS,
@@ -87,9 +87,9 @@ cc_binary(
     name = "e2e_profile_07_test_service",
     testonly = True,
     srcs = [
+        "e2e_profile_07_test_common.hpp",
         "e2e_profile_07_test_service.cpp",
         "e2e_profile_07_test_service.hpp",
-        "e2e_profile_07_test_common.hpp",
     ],
     includes = ["."],
     linkopts = _COMMON_LINKOPTS,

@@ -204,7 +204,6 @@ public:
 
     VSOMEIP_EXPORT bool check_suppress_events(service_t _service, instance_t _instance, event_t _event) const;
 
-    VSOMEIP_EXPORT std::map<plugin_type_e, std::set<std::string>> get_plugins(const std::string& _name) const;
     // E2E
     VSOMEIP_EXPORT std::map<e2exf::data_identifier_t, std::shared_ptr<cfg::e2e>> get_e2e_configuration() const;
     VSOMEIP_EXPORT bool is_e2e_enabled() const;
@@ -268,9 +267,6 @@ public:
 
     VSOMEIP_EXPORT partition_id_t get_partition_id(service_t _service, instance_t _instance) const;
 
-    VSOMEIP_EXPORT std::map<std::string, std::string> get_additional_data(const std::string& _application_name,
-                                                                          const std::string& _plugin_name);
-
     VSOMEIP_EXPORT reliability_type_e get_reliability_type(const boost::asio::ip::address& _reliable_address,
                                                            const uint16_t& _reliable_port,
                                                            const boost::asio::ip::address& _unreliable_address,
@@ -300,17 +296,6 @@ private:
 
     bool load_applications(const configuration_element& _element);
     void load_application_data(const boost::property_tree::ptree& _tree, const std::string& _file_name);
-
-    std::map<plugin_type_e, std::set<std::string>> load_plugins(const boost::property_tree::ptree& _tree,
-                                                                const std::string& _application_name);
-
-    struct plugin_config_data_t {
-        std::string name_;
-        std::string type_;
-    };
-
-    void add_plugin(std::map<plugin_type_e, std::set<std::string>>& _plugins, const plugin_config_data_t& _plugin_data,
-                    const std::string& _application_name);
 
     bool load_routing(const configuration_element& _element);
     bool load_routing_host(const boost::property_tree::ptree& _tree, const std::string& _name);
@@ -559,8 +544,6 @@ protected:
         ET_NETMASK,
         ET_UDP_RECEIVE_BUFFER_SIZE,
         ET_NPDU_DEFAULT_TIMINGS,
-        ET_PLUGIN_NAME,
-        ET_PLUGIN_TYPE,
         ET_SHUTDOWN_TIMEOUT,
         ET_MAX_REMOTE_SUBSCRIBERS,
         ET_PARTITIONS,
@@ -641,8 +624,6 @@ protected:
     service_instance_map<partition_id_t> partitions_;
 
     std::string path_;
-
-    std::map<std::string, std::map<std::string, std::map<std::string, std::string>>> plugins_additional_;
 
     std::atomic_bool is_security_enabled_;
     std::atomic_bool is_security_external_;

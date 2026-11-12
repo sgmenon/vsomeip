@@ -10,7 +10,6 @@
 #include <set>
 
 #include <vsomeip/primitive_types.hpp>
-#include <vsomeip/plugin.hpp>
 
 #include "debounce_filter_impl.hpp"
 
@@ -25,7 +24,6 @@ struct application_configuration {
     std::size_t max_detach_thread_wait_time_;
     std::size_t thread_count_;
     std::size_t request_debounce_time_;
-    std::map<plugin_type_e, std::set<std::string>> plugins_;
     int nice_level_;
     debounce_configuration_t debounces_;
     bool has_session_handling_;
