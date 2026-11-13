@@ -21,8 +21,6 @@
 
 #include <vsomeip/defines.hpp>
 #include <vsomeip/runtime.hpp>
-#include <vsomeip/plugins/application_plugin.hpp>
-#include <vsomeip/plugins/pre_configuration_plugin.hpp>
 #include <vsomeip/internal/logger.hpp>
 
 #include "../include/application_impl.hpp"
@@ -344,20 +342,7 @@ bool application_impl::init() {
     }
 #endif
 
-    if (configuration_) {
-        auto its_plugins = configuration_->get_plugins(name_);
-        auto its_app_plugin_info = its_plugins.find(plugin_type_e::APPLICATION_PLUGIN);
-        if (its_app_plugin_info != its_plugins.end()) {
-            for (auto its_library : its_app_plugin_info->second) {
-                auto its_application_plugin = plugin_manager::get()->get_plugin(plugin_type_e::APPLICATION_PLUGIN, its_library);
-                if (its_application_plugin) {
-                    VSOMEIP_INFO << "Client 0x" << std::hex << get_client() << " Loading plug-in library: " << its_library << " succeeded!";
-                    std::dynamic_pointer_cast<application_plugin>(its_application_plugin)
-                            ->on_application_state_change(name_, application_plugin_state_e::STATE_INITIALIZED);
-                }
-            }
-        }
-    } else {
+    if (!configuration_) {
         std::cerr << "Configuration module could not be loaded!" << std::endl;
         std::exit(EXIT_FAILURE);
     }
@@ -494,19 +479,6 @@ void application_impl::start() {
 #endif
             ;
 
-    // NOTE: must happen *AFTER* `routing_->start()`, as plugins may already do offer_service
-    auto its_plugins = configuration_->get_plugins(name_);
-    auto its_app_plugin_info = its_plugins.find(plugin_type_e::APPLICATION_PLUGIN);
-    if (its_app_plugin_info != its_plugins.end()) {
-        for (const auto& its_library : its_app_plugin_info->second) {
-            auto its_application_plugin = plugin_manager::get()->get_plugin(plugin_type_e::APPLICATION_PLUGIN, its_library);
-            if (its_application_plugin) {
-                std::dynamic_pointer_cast<application_plugin>(its_application_plugin)
-                        ->on_application_state_change(name_, application_plugin_state_e::STATE_STARTED);
-            }
-        }
-    }
-
     utility::set_thread_niceness(io_thread_nice_level);
     while (true) {
         try {
@@ -568,20 +540,6 @@ void application_impl::stop() {
         }
         if (start_caller_id_ == stop_caller_id_) {
             block = false;
-        }
-    }
-
-    if (configuration_) {
-        auto its_plugins = configuration_->get_plugins(name_);
-        auto its_app_plugin_info = its_plugins.find(plugin_type_e::APPLICATION_PLUGIN);
-        if (its_app_plugin_info != its_plugins.end()) {
-            for (const auto& its_library : its_app_plugin_info->second) {
-                auto its_application_plugin = plugin_manager::get()->get_plugin(plugin_type_e::APPLICATION_PLUGIN, its_library);
-                if (its_application_plugin) {
-                    std::dynamic_pointer_cast<application_plugin>(its_application_plugin)
-                            ->on_application_state_change(name_, application_plugin_state_e::STATE_STOPPED);
-                }
-            }
         }
     }
 
@@ -2926,13 +2884,6 @@ void application_impl::register_message_acceptance_handler(const message_accepta
     }
 }
 
-std::map<std::string, std::string> application_impl::get_additional_data(const std::string& _plugin_name) {
-    if (configuration_) {
-        return configuration_->get_additional_data(name_, _plugin_name);
-    }
-    return std::map<std::string, std::string>();
-}
-
 void application_impl::register_message_handler_ext(service_t _service, instance_t _instance, method_t _method,
                                                     const message_handler_t& _handler, handler_registration_type_e _type) {
 
@@ -2982,19 +2933,6 @@ void application_impl::start_nonblocking() {
     if (routing_)
         routing_->start();
 
-    auto its_plugins = configuration_->get_plugins(name_);
-    auto its_app_plugin_info = its_plugins.find(plugin_type_e::APPLICATION_PLUGIN);
-    if (its_app_plugin_info != its_plugins.end()) {
-        for (const auto& its_library : its_app_plugin_info->second) {
-            auto its_application_plugin = plugin_manager::get()->get_plugin(
-                    plugin_type_e::APPLICATION_PLUGIN, its_library);
-            if (its_application_plugin) {
-                std::dynamic_pointer_cast<application_plugin>(its_application_plugin)
-                        ->on_application_state_change(name_, application_plugin_state_e::STATE_STARTED);
-            }
-        }
-    }
-
     VSOMEIP_INFO << "Started vsomeip application \"" << name_ << "\" ("
                  << std::hex << std::setfill('0') << std::setw(4) << client_
                  << ") with external I/O context";
@@ -3009,21 +2947,6 @@ void application_impl::stop_nonblocking() {
     {
         std::scoped_lock its_lock{dispatcher_mutex_};
         is_dispatching_ = false;
-    }
-
-    if (configuration_) {
-        auto its_plugins = configuration_->get_plugins(name_);
-        auto its_app_plugin_info = its_plugins.find(plugin_type_e::APPLICATION_PLUGIN);
-        if (its_app_plugin_info != its_plugins.end()) {
-            for (const auto& its_library : its_app_plugin_info->second) {
-                auto its_application_plugin = plugin_manager::get()->get_plugin(
-                        plugin_type_e::APPLICATION_PLUGIN, its_library);
-                if (its_application_plugin) {
-                    std::dynamic_pointer_cast<application_plugin>(its_application_plugin)
-                            ->on_application_state_change(name_, application_plugin_state_e::STATE_STOPPED);
-                }
-            }
-        }
     }
 
     if (routing_)

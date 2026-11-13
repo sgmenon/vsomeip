@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include <vsomeip/internal/logger.hpp>
+#include <vsomeip/plugins/builtin_plugins.hpp>
 
 #include "../../../../e2e_protection/include/e2e/profile/e2e_provider_impl.hpp"
 
@@ -59,12 +60,21 @@ value_t read_value_from_config(const std::shared_ptr<vsomeip_v3::cfg::e2e>& _con
 
 } // namespace
 
+// See runtime_impl.cpp: this symbol is shared by every plugin, so it is
+// omitted from the static build.
+#ifndef VSOMEIP_STATIC_PLUGINS
 VSOMEIP_PLUGIN(vsomeip_v3::e2e::e2e_provider_impl)
+#endif
 
 namespace vsomeip_v3 {
+
+std::shared_ptr<plugin> create_e2e_plugin() {
+    return e2e::e2e_provider_impl::get_plugin();
+}
+
 namespace e2e {
 
-e2e_provider_impl::e2e_provider_impl() : plugin_impl("vsomeip e2e plugin", 1, plugin_type_e::APPLICATION_PLUGIN) { }
+e2e_provider_impl::e2e_provider_impl() : plugin_impl("vsomeip e2e plugin", 1, plugin_type_e::E2E_PLUGIN) { }
 
 e2e_provider_impl::~e2e_provider_impl() { }
 

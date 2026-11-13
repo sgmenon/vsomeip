@@ -9,12 +9,8 @@
 #   * `:vsomeip-core-import`  → libvsomeip3-core.so (wire-level subset)
 #   * `:vsomeip-sd`           → libvsomeip3-sd.so.3 (SD plugin)
 #
-# `-Wl,--no-as-needed` is applied so the SD library stays as a DT_NEEDED
-# entry even though the binary references no symbols from it directly. That
-# way the kernel loader maps it at process start, and the dlopen("libvsomeip3-sd.so.3")
-# inside `service_discovery_impl::init()` (via `plugin_manager::get_plugin`)
-# is just a refcount bump on an already-mapped library — no filesystem
-# search, no second mapping, the SD runtime singleton stays unique.
+# The binary constructs `service_discovery_impl` itself, so it needs no
+# plugin registration.
 
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 
@@ -24,12 +20,7 @@ cc_binary(
         "sd_only_host.cpp",
     ],
     data = ["sd_only_host.json"],
-    # `-Wl,--no-as-needed` keeps `libvsomeip3-sd.so.3` as a DT_NEEDED entry
-    # even though the binary never references an SD symbol directly — that's
-    # what makes plugin_manager's dlopen of the same string a no-op refcount
-    # bump at runtime.
     linkopts = [
-        "-Wl,--no-as-needed",
         "-Wl,-rpath,$$ORIGIN",
     ],
     deps = [

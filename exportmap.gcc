@@ -55,6 +55,10 @@ global:
         vsomeip_v3::utility::exists*;
         *vsomeip_v3::plugin_manager;
         vsomeip_v3::plugin_manager::*;
+        vsomeip_v3::static_plugins*;
+        vsomeip_v3::create_sd_runtime_plugin*;
+        vsomeip_v3::create_e2e_plugin*;
+        vsomeip_v3::create_configuration_plugin*;
         vsomeip_v3::tp::tp_reassembler::*;
         *vsomeip_v3::logger::message;
         vsomeip_v3::logger::message::*;

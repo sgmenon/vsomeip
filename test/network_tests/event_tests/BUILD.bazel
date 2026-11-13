@@ -10,7 +10,7 @@ package(default_visibility = ["//test/network_tests:__subpackages__"])
 
 _COMMON_DEPS = [
     "//:vsomeip",
-    "//:vsomeip-sd",
+    "//:vsomeip-plugins",
     "//test/common:vsomeip_utilities",
     "//test/network_tests:someip_test_globals",
     "@googletest//:gtest",
@@ -37,8 +37,8 @@ cc_binary(
     name = "event_test_service",
     testonly = True,
     srcs = [
-        "event_test_service.cpp",
         "event_test_globals.hpp",
+        "event_test_service.cpp",
     ],
     includes = ["."],
     linkopts = _COMMON_LINKOPTS,

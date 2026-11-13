@@ -9,14 +9,14 @@ on:
       - main
 
 permissions:
-   contents: read
+  contents: read
 
 jobs:
   build-intel:
     name: Build Intel
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0      - uses: actions/checkout@v4
 
       - name: Bazel build Intel
         uses: ./.github/actions/bazel
@@ -27,7 +27,7 @@ jobs:
     name: Build aarch64
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0      - uses: actions/checkout@v4
 
       - name: Bazel build Aarch64
         uses: ./.github/actions/bazel
@@ -42,7 +42,7 @@ jobs:
       matrix:
         sanitizer: [opt, asan, lsan, tsan, ubsan]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0      - uses: actions/checkout@v4
 
       - name: Bazel test --config=${{ matrix.sanitizer }}
         uses: ./.github/actions/bazel
@@ -51,7 +51,7 @@ jobs:
 
       - name: Upload test logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2        uses: actions/upload-artifact@v4
         with:
           name: testlogs-${{ matrix.sanitizer }}
           path: ~/.cache/bazel/**/testlogs/**/test.log

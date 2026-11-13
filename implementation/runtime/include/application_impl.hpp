@@ -188,8 +188,6 @@ public:
 
     VSOMEIP_EXPORT void register_message_acceptance_handler(const message_acceptance_handler_t& _handler);
 
-    VSOMEIP_EXPORT std::map<std::string, std::string> get_additional_data(const std::string& _plugin_name);
-
     VSOMEIP_EXPORT void register_subscription_handler(service_t _service, instance_t _instance, eventgroup_t _eventgroup,
                                                       const subscription_handler_sec_t& _handler);
     VSOMEIP_EXPORT void register_async_subscription_handler(service_t _service, instance_t _instance, eventgroup_t _eventgroup,

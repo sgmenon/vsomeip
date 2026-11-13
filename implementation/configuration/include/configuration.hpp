@@ -192,13 +192,7 @@ public:
     virtual bool log_version() const = 0;
     virtual uint32_t get_log_version_interval() const = 0;
 
-    // Plugins
-    virtual std::map<plugin_type_e, std::set<std::string>> get_plugins(const std::string& _name) const = 0;
-
     virtual void set_configuration_path(const std::string& _path) = 0;
-
-    virtual std::map<std::string, std::string> get_additional_data(const std::string& _application_name,
-                                                                   const std::string& _plugin_name) = 0;
 
     // E2E
     virtual std::map<e2exf::data_identifier_t, std::shared_ptr<cfg::e2e>> get_e2e_configuration() const = 0;

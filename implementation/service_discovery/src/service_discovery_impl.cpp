@@ -35,7 +35,6 @@
 #include "../../endpoints/include/endpoint_definition.hpp"
 #include "../../endpoints/include/tcp_server_endpoint_impl.hpp"
 #include "../../message/include/serializer.hpp"
-#include "../../plugin/include/plugin_manager_impl.hpp"
 #include "../../routing/include/event.hpp"
 #include "../../routing/include/eventgroupinfo.hpp"
 #include "../../routing/include/serviceinfo.hpp"
@@ -69,13 +68,6 @@ boost::asio::io_context& service_discovery_impl::get_io() {
 }
 
 void service_discovery_impl::init() {
-    const char *its_sd_module = VSOMEIP_GETENV(VSOMEIP_ENV_SD_MODULE);
-    std::string plugin_name = its_sd_module != nullptr ? its_sd_module : VSOMEIP_SD_LIBRARY;
-
-    VSOMEIP_INFO << "Get SD plugin " << plugin_name;
-    runtime_ = std::dynamic_pointer_cast<sd::runtime>(
-            plugin_manager::get()->get_plugin(plugin_type_e::SD_RUNTIME_PLUGIN, plugin_name));
-
     unicast_ = configuration_->get_unicast_address();
     sd_multicast_ = configuration_->get_sd_multicast();
     boost::system::error_code ec;
@@ -371,11 +363,6 @@ void service_discovery_impl::get_subscription_address(const std::shared_ptr<endp
 }
 
 void service_discovery_impl::unsubscribe(service_t _service, instance_t _instance, eventgroup_t _eventgroup, client_t _client) {
-    std::shared_ptr<runtime> its_runtime = runtime_.lock();
-    if (!its_runtime) {
-        return;
-    }
-
     auto its_current_message = std::make_shared<message_impl>();
 
     boost::asio::ip::address its_address;
@@ -965,22 +952,16 @@ void service_discovery_impl::insert_subscription_ack(const std::shared_ptr<remot
 }
 
 bool service_discovery_impl::send(bool _is_announcing) {
-    std::shared_ptr<runtime> its_runtime = runtime_.lock();
-    if (its_runtime) {
+    if (_is_announcing) {
         std::vector<std::shared_ptr<message_impl>> its_messages;
-        std::shared_ptr<message_impl> its_message;
+        its_messages.push_back(std::make_shared<message_impl>());
 
-        if (_is_announcing) {
-            its_message = std::make_shared<message_impl>();
-            its_messages.push_back(its_message);
+        std::lock_guard<std::mutex> its_lock(offer_mutex_);
+        services_t its_offers = host_->get_offered_services();
+        insert_offer_entries(its_messages, its_offers, false);
 
-            std::lock_guard<std::mutex> its_lock(offer_mutex_);
-            services_t its_offers = host_->get_offered_services();
-            insert_offer_entries(its_messages, its_offers, false);
-
-            // Serialize and send
-            return send(its_messages);
-        }
+        // Serialize and send
+        return send(its_messages);
     }
     return false;
 }
@@ -1066,11 +1047,6 @@ void service_discovery_impl::on_message(const byte_t* _data, length_t _length, c
         }
 
         std::vector<std::shared_ptr<option_impl>> its_options = its_message->get_options();
-
-        std::shared_ptr<runtime> its_runtime = runtime_.lock();
-        if (!its_runtime) {
-            return;
-        }
 
         auto its_acknowledgement = std::make_shared<remote_subscription_ack>(_sender);
 
@@ -1321,10 +1297,6 @@ void service_discovery_impl::process_offerservice_serviceentry(service_t _servic
                                                                uint16_t _unreliable_port,
                                                                std::vector<std::shared_ptr<message_impl>>& _resubscribes,
                                                                bool _received_via_multicast, const sd_acceptance_state_t& _sd_ac_state) {
-    std::shared_ptr<runtime> its_runtime = runtime_.lock();
-    if (!its_runtime)
-        return;
-
     bool is_secure = configuration_->is_secure_service(_service, _instance);
     if (is_secure
         && ((_reliable_port != ILLEGAL_PORT && !configuration_->is_secure_port(_reliable_address, _reliable_port, true))
@@ -1506,11 +1478,6 @@ void service_discovery_impl::process_findservice_serviceentry(service_t _service
 }
 
 void service_discovery_impl::send_unicast_offer_service(const std::shared_ptr<const serviceinfo>& _info) {
-    std::shared_ptr<runtime> its_runtime = runtime_.lock();
-    if (!its_runtime) {
-        return;
-    }
-
     auto its_offer_message(std::make_shared<message_impl>());
     std::vector<std::shared_ptr<message_impl>> its_messages;
     its_messages.push_back(its_offer_message);
@@ -1533,11 +1500,6 @@ void service_discovery_impl::send_multicast_offer_service(const std::shared_ptr<
 }
 
 void service_discovery_impl::on_endpoint_connected(service_t _service, instance_t _instance, const std::shared_ptr<endpoint>& _endpoint) {
-    std::shared_ptr<runtime> its_runtime = runtime_.lock();
-    if (!its_runtime) {
-        return;
-    }
-
     // TODO: Simplify this method! It is not clear, why we need to check
     // both endpoints here although the method is always called for a
     // single one.

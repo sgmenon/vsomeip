@@ -4,7 +4,14 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # Daemon
-add_executable(routingmanagerd routingmanagerd.cpp)
+if (VSOMEIP_STATIC_PLUGINS)
+    add_executable(routingmanagerd routingmanagerd.cpp
+        ${PROJECT_SOURCE_DIR}/implementation/plugin/registration/register_plugins.cpp)
+    # The list is defined in the executable. Export it so libvsomeip can call it.
+    target_link_libraries(routingmanagerd ${VSOMEIP_NAME}-sd ${VSOMEIP_NAME}-e2e ${VSOMEIP_NAME}-cfg -Wl,-export-dynamic)
+else ()
+    add_executable(routingmanagerd routingmanagerd.cpp)
+endif ()
 target_link_libraries(routingmanagerd ${VSOMEIP_NAME} ${Boost_LIBRARIES} ${DL_LIBRARY} ${DLT_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         target_link_libraries(routingmanagerd stdc++)

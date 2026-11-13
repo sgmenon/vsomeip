@@ -1019,13 +1019,6 @@ public:
     virtual void register_message_acceptance_handler(const message_acceptance_handler_t& _handler) = 0;
 
     /**
-     * \brief Get the configuration additional data of an application plugin
-     *
-     * \return The configuration additional data of an application plugin
-     */
-    virtual std::map<std::string, std::string> get_additional_data(const std::string& _plugin_name) = 0;
-
-    /**
      *
      * \brief Register a callback that is called when service instances
      * availability (state) changes.

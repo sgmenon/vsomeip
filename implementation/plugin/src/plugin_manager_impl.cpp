@@ -8,7 +8,9 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+#include <mutex>
 
+#ifndef VSOMEIP_STATIC_PLUGINS
 #ifdef _WIN32
 #ifndef _WINSOCKAPI_
 #include <Windows.h>
@@ -16,9 +18,9 @@
 #else
 #include <dlfcn.h>
 #endif
+#endif // !VSOMEIP_STATIC_PLUGINS
 
-#include <vsomeip/plugins/application_plugin.hpp>
-#include <vsomeip/plugins/pre_configuration_plugin.hpp>
+#include <vsomeip/plugin_registry.hpp>
 #include <vsomeip/internal/logger.hpp>
 
 #include "../include/plugin_manager_impl.hpp"
@@ -46,6 +48,78 @@ plugin_manager_impl::~plugin_manager_impl() {
     plugins_.clear();
 }
 
+#ifdef VSOMEIP_STATIC_PLUGINS
+
+namespace {
+
+// static_plugins is a weak symbol. Its address is null when this binary
+// does not define the list.
+create_plugin_func find_static_plugin(plugin_type_e _type) {
+    if (static_plugins == nullptr) {
+        return nullptr;
+    }
+    const static_plugin_list its_list = static_plugins();
+    for (std::size_t i = 0; i < its_list.size_; ++i) {
+        const static_plugin_entry& its_entry = its_list.entries_[i];
+        if (its_entry.type_ == _type && its_entry.create_ != nullptr) {
+            return its_entry.create_;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
+
+std::shared_ptr<plugin> plugin_manager_impl::get_plugin(plugin_type_e _type, const std::string& _name) {
+    std::lock_guard<std::recursive_mutex> its_lock_start_stop(plugins_mutex_);
+    auto its_type = plugins_.find(_type);
+    if (its_type != plugins_.end() && !its_type->second.empty()) {
+        return its_type->second.begin()->second;
+    }
+
+    const create_plugin_func its_create = find_static_plugin(_type);
+    if (its_create == nullptr) {
+        VSOMEIP_ERROR << "No plugin of type " << static_cast<int>(_type) << " is linked into this binary (requested \"" << _name
+                      << "\"). Add it to static_plugins().";
+        return nullptr;
+    }
+
+    auto its_plugin = its_create();
+    if (!its_plugin || its_plugin->get_plugin_type() != _type || its_plugin->get_plugin_version() != 1) {
+        VSOMEIP_ERROR << "Plugin registered for type " << static_cast<int>(_type) << " does not match it. Ignoring.";
+        return nullptr;
+    }
+    add_plugin(its_plugin, its_plugin->get_plugin_name());
+    return its_plugin;
+}
+
+std::shared_ptr<plugin> plugin_manager_impl::load_plugin(const std::string& _library, plugin_type_e _type, uint32_t _version) {
+    (void)_version;
+    return get_plugin(_type, _library);
+}
+
+bool plugin_manager_impl::unload_plugin(plugin_type_e _type) {
+    std::lock_guard<std::recursive_mutex> its_lock_start_stop(plugins_mutex_);
+    return plugins_.erase(_type) > 0;
+}
+
+void* plugin_manager_impl::load_library(const std::string& _path) {
+    VSOMEIP_ERROR << "Cannot load \"" << _path << "\": this build resolves plugins at link time (VSOMEIP_STATIC_PLUGINS).";
+    return nullptr;
+}
+
+void* plugin_manager_impl::load_symbol(void* _handle, const std::string& _symbol_name) {
+    (void)_handle;
+    (void)_symbol_name;
+    return nullptr;
+}
+
+void plugin_manager_impl::unload_library(void* _handle) {
+    (void)_handle;
+}
+
+#else // VSOMEIP_STATIC_PLUGINS
+
 std::shared_ptr<plugin> plugin_manager_impl::get_plugin(plugin_type_e _type, const std::string& _name) {
     std::lock_guard<std::recursive_mutex> its_lock_start_stop(plugins_mutex_);
     auto its_type = plugins_.find(_type);
@@ -64,10 +138,10 @@ std::shared_ptr<plugin> plugin_manager_impl::load_plugin(const std::string& _lib
     if (its_init_func) {
         create_plugin_func its_create_func = (*its_init_func)();
         if (its_create_func) {
-            handles_[_type][_library] = handle;
             auto its_plugin = (*its_create_func)();
             if (its_plugin) {
                 if (its_plugin->get_plugin_type() == _type && its_plugin->get_plugin_version() == _version) {
+                    handles_[_type][_library] = handle;
                     add_plugin(its_plugin, _library);
                     return its_plugin;
                 } else {
@@ -76,6 +150,7 @@ std::shared_ptr<plugin> plugin_manager_impl::load_plugin(const std::string& _lib
             }
         }
     }
+    unload_library(handle);
     return nullptr;
 }
 
@@ -92,16 +167,13 @@ bool plugin_manager_impl::unload_plugin(plugin_type_e _type) {
             }
 #endif
         }
+        handles_.erase(found_handle);
     } else {
         VSOMEIP_ERROR << "plugin_manager_impl::unload_plugin didn't find plugin"
                       << " type:" << static_cast<int>(_type);
         return false;
     }
     return plugins_.erase(_type);
-}
-
-void plugin_manager_impl::add_plugin(const std::shared_ptr<plugin>& _plugin, const std::string& _name) {
-    plugins_[_plugin->get_plugin_type()][_name] = _plugin;
 }
 
 void* plugin_manager_impl::load_library(const std::string& _path) {
@@ -160,6 +232,12 @@ void plugin_manager_impl::unload_library(void* _handle) {
         dlclose(_handle);
 #endif
     }
+}
+
+#endif // VSOMEIP_STATIC_PLUGINS
+
+void plugin_manager_impl::add_plugin(const std::shared_ptr<plugin>& _plugin, const std::string& _name) {
+    plugins_[_plugin->get_plugin_type()][_name] = _plugin;
 }
 
 } // namespace vsomeip_v3

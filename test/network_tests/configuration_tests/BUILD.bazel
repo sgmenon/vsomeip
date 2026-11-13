@@ -4,8 +4,8 @@
 # The binary hardcodes VSOMEIP_CONFIGURATION=configuration_test.json and
 # opens it relative to cwd, so a thin sh wrapper cds into the config dir.
 
-load("@rules_cc//cc:cc_import.bzl", "cc_import")
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 
 # Ship the .in content as the runtime JSON (no @VAR@ substitutions).
 genrule(
@@ -13,12 +13,6 @@ genrule(
     srcs = ["conf/configuration_test.json.in"],
     outs = ["configuration_test.json"],
     cmd = "cp $< $@",
-)
-
-# DT_NEEDED libvsomeip3-cfg.so.3 so plugin_manager dlopen is a refcount bump.
-cc_import(
-    name = "vsomeip3-cfg-import",
-    shared_library = "//:vsomeip3-cfg",
 )
 
 cc_binary(
@@ -30,8 +24,8 @@ cc_binary(
         "-Wl,-rpath,$$ORIGIN",
     ],
     deps = [
-        ":vsomeip3-cfg-import",
         "//:vsomeip-lib",
+        "//:vsomeip-plugins",
         "//test/common:vsomeip_utilities",
         "@googletest//:gtest",
     ],

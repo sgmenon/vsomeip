@@ -25,7 +25,10 @@
 
 namespace vsomeip_v3 {
 
-enum class plugin_type_e : uint8_t { APPLICATION_PLUGIN, PRE_CONFIGURATION_PLUGIN, CONFIGURATION_PLUGIN, SD_RUNTIME_PLUGIN };
+// Numeric values are part of the plugin ABI. E2E_PLUGIN occupies the value
+// APPLICATION_PLUGIN had, because the E2E provider reported that type.
+// PRE_CONFIGURATION_PLUGIN is no longer loaded.
+enum class plugin_type_e : uint8_t { E2E_PLUGIN, PRE_CONFIGURATION_PLUGIN, CONFIGURATION_PLUGIN, SD_RUNTIME_PLUGIN };
 
 class plugin;
 typedef std::shared_ptr<plugin> (*create_plugin_func)();

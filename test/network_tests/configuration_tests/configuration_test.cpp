@@ -11,7 +11,6 @@
 #include <common/utility.hpp>
 
 #include <vsomeip/constants.hpp>
-#include <vsomeip/plugins/application_plugin.hpp>
 #include <vsomeip/internal/logger.hpp>
 #include <vsomeip/internal/plugin_manager.hpp>
 #include "../implementation/configuration/include/configuration.hpp"
@@ -333,13 +332,6 @@ void check_file(const std::string& _config_file, const std::string& _expected_un
 
     EXPECT_EQ(0x9933, its_configuration->get_id("other_application"));
 
-    std::map<vsomeip::plugin_type_e, std::set<std::string>> its_plugins = its_configuration->get_plugins(EXPECTED_ROUTING_MANAGER_HOST);
-    EXPECT_EQ(1u, its_plugins.size());
-    for (const auto& plugin : its_plugins) {
-        EXPECT_EQ(vsomeip::plugin_type_e::APPLICATION_PLUGIN, plugin.first);
-        for (const auto& its_library : plugin.second)
-            EXPECT_EQ(std::string("libtestlibraryname.so." + std::to_string(VSOMEIP_APPLICATION_PLUGIN_VERSION)), its_library);
-    }
     EXPECT_EQ(vsomeip::plugin_type_e::CONFIGURATION_PLUGIN, its_plugin->get_plugin_type());
     EXPECT_EQ("vsomeip-configuration-plugin", its_plugin->get_plugin_name());
     EXPECT_EQ(1u, its_plugin->get_plugin_version());

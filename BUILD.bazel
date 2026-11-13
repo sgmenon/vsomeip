@@ -21,6 +21,20 @@ config_setting(
     flag_values = {":multiple_routing_managers_enabled": "True"},
 )
 
+# When True, plugin_manager resolves plugins from the constexpr list
+# static_plugins() (see interface/vsomeip/plugin_registry.hpp) and never
+# dlopens. Applications provide that list by depending on `:vsomeip-plugins`.
+# See documentation/static-plugin-registry.md.
+bool_flag(
+    name = "static_plugins",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "is_static_plugins_enabled",
+    flag_values = {":static_plugins": "True"},
+)
+
 string_flag(
     name = "diagnosis_address",
     build_setting_default = "0x01",
@@ -70,7 +84,10 @@ VSOMEIP_DEFINES = [
     "VSOMEIP_USE_SPDLOG",
     "VSOMEIP_INTERNAL_SUPPRESS_DEPRECATED",
     "VSOMEIP_BOOST_VERSION=108700",
-]
+] + select({
+    ":is_static_plugins_enabled": ["VSOMEIP_STATIC_PLUGINS"],
+    "//conditions:default": [],
+})
 
 VSOMEIP_LINKOPTS = select({
     "@platforms//os:linux": [
@@ -646,10 +663,8 @@ cc_shared_library(
     # Stamp DT_SONAME so the file produced here advertises the name the
     # plugin manager dlopens (`internal.hpp` → VSOMEIP_SD_LIBRARY) and the
     # genrule below renames it to. Any downstream binary that DT_NEEDED's
-    # `:vsomeip-sd` then records the same string in its NEEDED slot,
-    # which means service_discovery_impl::init()'s plugin_manager dlopen
-    # finds the lib already loaded and just bumps the refcount — no
-    # second mapping, no LD_LIBRARY_PATH search.
+    # `:vsomeip-sd` then records the same string in its NEEDED slot, so a
+    # dlopen in the flag-off build finds the lib already loaded.
     user_link_flags = ["-Wl,-soname,libvsomeip3-sd.so.3"],
     deps = [":vsomeip-sd-lib"],
 )
@@ -676,9 +691,11 @@ cc_import(
 # =============================================================================
 # E2E Protection library (vsomeip-e2e)
 #
-# e2e is loaded by the routing manager (see `routing_manager_impl::init`),
-# so it lives in the full-vsomeip world and DT_NEEDED's libvsomeip3.so.3
-# rather than libvsomeip3-core.so.3.
+# e2e is requested by the routing manager (see `routing_manager_impl::init`)
+# but only uses core symbols (logger, `cfg::e2e`), so it DT_NEEDED's
+# libvsomeip3-core.so.3 like the SD and configuration plugins. That keeps a
+# binary that statically links `:vsomeip-lib` from also loading
+# libvsomeip3.so.3 through this plugin.
 # =============================================================================
 
 VSOMEIP_E2E_SRCS = [
@@ -718,7 +735,7 @@ cc_library(
 
 cc_shared_library(
     name = "vsomeip3-e2e-unversioned",
-    dynamic_deps = [":vsomeip3"],
+    dynamic_deps = [":vsomeip3-core"],
     user_link_flags = ["-Wl,-soname,libvsomeip3-e2e.so.3"],
     deps = [":vsomeip-e2e-lib"],
 )
@@ -740,4 +757,48 @@ cc_import(
         ":vsomeip-core",
         ":vsomeip-internal-hdrs",
     ],
+)
+
+cc_import(
+    name = "vsomeip-cfg-import",
+    shared_library = ":vsomeip3-cfg",
+    deps = [
+        ":vsomeip-core",
+        ":vsomeip-internal-hdrs",
+    ],
+)
+
+# =============================================================================
+# Link-time plugin registration
+#
+# A binary depends on this and nothing else. --//:static_plugins selects
+# what that dependency means: the plugin cc_libraries, archived into the
+# binary, or the plugin .so files, which dlopen finds already loaded.
+# `alwayslink` keeps register_plugins.cpp. static_plugins() lists service
+# discovery and configuration together, and E2E beside them; drop the E2E
+# entry to leave that plugin unregistered. `-u` keeps the definition in the
+# link, because nothing else in the binary names the symbol.
+# =============================================================================
+
+cc_library(
+    name = "vsomeip-plugins",
+    srcs = ["implementation/plugin/registration/register_plugins.cpp"],
+    copts = VSOMEIP_COPTS,
+    linkopts = ["-Wl,-u,_ZN10vsomeip_v314static_pluginsEv"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":vsomeip_hdrs",
+    ] + select({
+        ":is_static_plugins_enabled": [
+            ":vsomeip-cfg",
+            ":vsomeip-e2e-lib",
+            ":vsomeip-sd-lib",
+        ],
+        "//conditions:default": [
+            ":vsomeip-cfg-import",
+            ":vsomeip-e2e",
+            ":vsomeip-sd",
+        ],
+    }),
+    alwayslink = True,
 )

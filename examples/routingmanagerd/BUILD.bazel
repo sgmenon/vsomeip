@@ -16,6 +16,6 @@ cc_binary(
     visibility = ["//visibility:public"],
     deps = [
         "//:vsomeip",
-        "//:vsomeip-sd",
+        "//:vsomeip-plugins",
     ],
 )
