@@ -691,6 +691,25 @@ TEST(configuration_test, check_config_file) {
                EXPECTED_TTL, EXPECTED_CYCLIC_OFFER_DELAY, EXPECTED_REQUEST_RESPONSE_DELAY, EXPECTED_WAIT_ROUTE_NETLINK_NOTFICATION);
 }
 
+TEST(configuration_test, application_plugin_additional_data) {
+    // applications[].plugins[].additional is keyed by application name and
+    // plugins[].name. Listing a name does not load a library.
+    std::shared_ptr<vsomeip::configuration> conf = load_config("additional_data", CONFIGURATION_FILE);
+    ASSERT_TRUE(conf);
+
+    const std::map<std::string, std::string> its_sd = conf->get_additional_data(EXPECTED_ROUTING_MANAGER_HOST, "gm-sd-passive");
+    // The additional object is {"sd": {...}}. The stored map is the inner keys.
+    ASSERT_EQ(2u, its_sd.size());
+    EXPECT_EQ("30490", its_sd.at("passive_port"));
+    EXPECT_EQ("passive", its_sd.at("mode"));
+
+    // An entry without additional has no data
+    EXPECT_TRUE(conf->get_additional_data(EXPECTED_ROUTING_MANAGER_HOST, "testlibraryname").empty());
+    // Unknown plugin name and unknown application both return empty
+    EXPECT_TRUE(conf->get_additional_data(EXPECTED_ROUTING_MANAGER_HOST, "not-configured").empty());
+    EXPECT_TRUE(conf->get_additional_data("AN UNKNOWN APPLICATION", "gm-sd-passive").empty());
+}
+
 TEST(configuration_test, default_values) {
     /// check loading of a default configuration
     // e.g., no file at all

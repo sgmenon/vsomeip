@@ -938,7 +938,7 @@ void configuration_impl::load_application_data(const boost::property_tree::ptree
                 its_request_debounce_time = 10000;
             }
         } else if (its_key == "plugins") {
-            VSOMEIP_WARNING << "Application plug-ins are no longer supported. Ignoring \"plugins\" in " << _file_name;
+            load_plugin_additional_data(i->second, its_name);
         } else if (its_key == "debounce") {
             try {
                 for (auto j = i->second.begin(); j != i->second.end(); ++j) {
@@ -977,6 +977,44 @@ void configuration_impl::load_application_data(const boost::property_tree::ptree
             VSOMEIP_WARNING << "Multiple configurations for application " << its_name << ". Ignoring a configuration from " << _file_name;
         }
     }
+}
+
+void configuration_impl::load_plugin_additional_data(const boost::property_tree::ptree& _tree, const std::string& _application_name) {
+    // Same walk as the previous plugins parser. `name` has to appear before
+    // `additional` in the object. Values are the children of each child of
+    // `additional`, which is how a nested object was stored.
+    for (auto i = _tree.begin(); i != _tree.end(); ++i) {
+        std::string its_name;
+        bool has_name = false;
+        for (auto l = i->second.begin(); l != i->second.end(); ++l) {
+            const std::string its_inner_key(l->first);
+            if (its_inner_key == "name") {
+                if (!has_name) {
+                    its_name = l->second.data();
+                    has_name = true;
+                }
+            } else if (its_inner_key == "additional" && has_name) {
+                for (auto m = l->second.begin(); m != l->second.end(); ++m) {
+                    for (auto n = m->second.begin(); n != m->second.end(); ++n) {
+                        plugins_additional_[_application_name][its_name][n->first] = n->second.data();
+                    }
+                }
+            }
+        }
+    }
+}
+
+std::map<std::string, std::string> configuration_impl::get_additional_data(const std::string& _application_name,
+                                                                           const std::string& _plugin_name) {
+    const auto its_application = plugins_additional_.find(_application_name);
+    if (its_application == plugins_additional_.end()) {
+        return {};
+    }
+    const auto its_plugin = its_application->second.find(_plugin_name);
+    if (its_plugin == its_application->second.end()) {
+        return {};
+    }
+    return its_plugin->second;
 }
 
 void configuration_impl::load_tracing(const configuration_element& _element) {

@@ -79,6 +79,9 @@ public:
 
     VSOMEIP_EXPORT void set_configuration_path(const std::string& _path);
 
+    VSOMEIP_EXPORT std::map<std::string, std::string> get_additional_data(const std::string& _application_name,
+                                                                          const std::string& _plugin_name);
+
     VSOMEIP_EXPORT const boost::asio::ip::address& get_unicast_address() const;
     VSOMEIP_EXPORT const boost::asio::ip::address& get_netmask() const;
     VSOMEIP_EXPORT unsigned short get_prefix() const;
@@ -296,6 +299,7 @@ private:
 
     bool load_applications(const configuration_element& _element);
     void load_application_data(const boost::property_tree::ptree& _tree, const std::string& _file_name);
+    void load_plugin_additional_data(const boost::property_tree::ptree& _tree, const std::string& _application_name);
 
     bool load_routing(const configuration_element& _element);
     bool load_routing_host(const boost::property_tree::ptree& _tree, const std::string& _name);
@@ -442,6 +446,8 @@ protected:
     vsomeip_v3::logger::level_e loglevel_;
 
     std::map<std::string, application_configuration> applications_;
+    // application name -> plugin name -> additional key/value
+    std::map<std::string, std::map<std::string, std::map<std::string, std::string>>> plugins_additional_;
     std::set<client_t> client_identifiers_;
 
     mutable std::mutex services_mutex_;

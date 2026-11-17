@@ -220,6 +220,9 @@ The following example assumes that different machines (i.e., with different IP a
   - **threads** (optional) - The number of internal threads to process messages and events within an application. Valid values are `1-255`. The default value is `2`.
   - **io_thread_nice** (optional) - The nice level for internal threads processing messages and events. POSIX/Linux only. For actual values refer to nice() documentation. The default value is `0`.
   - **request_debounce_time** (optional) - Specifies a debounce-time interval in ms in which request-service messages are sent to the routing manager. If an application requests many services in short same time the load of sent messages to the routing manager and furthermore the replies from the routing manager (which contains the routing info for the requested service if available) can be heavily reduced. The default value if not specified is set by the global configuration variable of the same name.
+  - **plugins** (optional array) - Additional configuration for a named plugin. The entry is not loaded.
+    - **name** - The key passed to `application::get_additional_data`. `name` has to appear before `additional` in the object.
+    - **additional** - String parameters for that name. Each value is itself an object; the stored map is the keys and values inside those objects.
   - **debounce** - Client/Application specific configuration of debouncing.
   - **has_session_handling** - Configures the session handling. Mostly used for E2E use cases when the application handles the CRC calculation over the SOME/IP header by themself, and need the ability to switch off the session handling as otherwise their calculated checksum does not match reality after vsomeip inserts the session identifier. Valid values are `true` or `false`. The default value is `true`.
 
