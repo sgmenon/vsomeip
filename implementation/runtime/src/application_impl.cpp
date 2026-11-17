@@ -2877,6 +2877,13 @@ bool application_impl::is_local_endpoint(const boost::asio::ip::address& _unicas
     return false;
 }
 
+std::map<std::string, std::string> application_impl::get_additional_data(const std::string& _plugin_name) {
+    if (configuration_) {
+        return configuration_->get_additional_data(name_, _plugin_name);
+    }
+    return {};
+}
+
 void application_impl::register_message_acceptance_handler(const message_acceptance_handler_t& _handler) {
     if (is_routing() && routing_) {
         const auto rm_impl = std::dynamic_pointer_cast<routing_manager_impl>(routing_);

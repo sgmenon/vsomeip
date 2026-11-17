@@ -194,6 +194,10 @@ public:
 
     virtual void set_configuration_path(const std::string& _path) = 0;
 
+    // applications[].plugins[].additional, keyed by application name and plugins[].name.
+    // Plugins listed there are not loaded.
+    virtual std::map<std::string, std::string> get_additional_data(const std::string& _application_name, const std::string& _plugin_name) = 0;
+
     // E2E
     virtual std::map<e2exf::data_identifier_t, std::shared_ptr<cfg::e2e>> get_e2e_configuration() const = 0;
     virtual bool is_e2e_enabled() const = 0;

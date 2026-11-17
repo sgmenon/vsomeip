@@ -64,10 +64,14 @@ The configuration guide says the plugin can, after the notification, call
 back into the public application API through `runtime::get()`. That is the
 plugin driving vsomeip from outside, not a hook inside the stack. There is
 no place for such a plugin to intercept a send, a receive, an offer, or a
-subscription. `application::get_additional_data` only echoed the JSON
-`additional` object back to whoever asked. No in-tree code asked, and the
-method is removed. An application that wants init, start, and stop
+subscription. An application that wants init, start, and stop
 notifications already has `register_state_handler`.
+
+`applications[].plugins[].additional` stays. It is a string map keyed by
+the application name and `plugins[].name`, returned by
+`application::get_additional_data`. The name does not have to be an
+application plugin: a custom SD plugin reads its parameters through that
+call. Listing the entry does not load a library.
 
 `pre_configuration_plugin::get_configuration_path()` is never called.
 `configuration_impl` parses `type: configuration_plugin` into
@@ -217,13 +221,11 @@ in both modes.
 ### 3.3 Retire application and pre-configuration plugins
 
 Delete the five `on_application_state_change` loops in `application_impl`.
-Stop parsing `applications[].plugins`. A configuration that still has the
-key logs a warning and otherwise loads as before. Update
-`documentation/vsomeipConfiguration.md` to drop the `plugins` entry and
-the hello/world example. Remove `application::get_additional_data` from
-the public interface; it has no remaining caller.
-`configuration::get_plugins` and `get_additional_data` are internal and
-are removed.
+Do not load the libraries named in `applications[].plugins`. Keep parsing
+`additional` into the name-keyed map, and keep
+`application::get_additional_data`. `configuration::get_plugins` is
+removed. Update `documentation/vsomeipConfiguration.md` to drop the
+hello/world loading example and describe `additional`.
 
 Leave `interface/vsomeip/plugins/application_plugin.hpp` and
 `pre_configuration_plugin.hpp` in place so an out-of-tree `#include`

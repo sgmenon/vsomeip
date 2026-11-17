@@ -108,6 +108,15 @@
                 {
                     "name" : "wrongtestlibraryname",
                     "type" : "intentionally_wrong_plugin"
+                },
+                {
+                    "name" : "gm-sd-passive",
+                    "additional" : {
+                        "sd" : {
+                            "passive_port" : "30490",
+                            "mode" : "passive"
+                        }
+                    }
                 }
             ]
         },
